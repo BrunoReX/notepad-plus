@@ -98,10 +98,21 @@ BOOL CALLBACK RegExtDlg::run_dlgProc(UINT Message, WPARAM wParam, LPARAM lParam)
 					TCHAR ext2Add[extNameMax] = TEXT("");
 					if (!_isCustomize)
 					{
-						int index2Add = ::SendDlgItemMessage(_hSelf, IDC_REGEXT_LANGEXT_LIST, LB_GETCURSEL, 0, 0);
-						::SendDlgItemMessage(_hSelf, IDC_REGEXT_LANGEXT_LIST, LB_GETTEXT, index2Add, (LPARAM)ext2Add);
-						addExt(ext2Add);
-						::SendDlgItemMessage(_hSelf, IDC_REGEXT_LANGEXT_LIST, LB_DELETESTRING, index2Add, 0);
+ 						int nItems = ::SendDlgItemMessage(_hSelf, IDC_REGEXT_LANGEXT_LIST, LB_GETSELCOUNT, 0, 0);
+ 						int *selItems = new int[nItems];
+ 
+ 						::SendDlgItemMessage(_hSelf, IDC_REGEXT_LANGEXT_LIST, LB_GETSELITEMS, nItems, (LPARAM)(LPINT)selItems);
+ 												
+ 						for (int i = 0; i < nItems; ++i)
+ 						{
+ 							::SendDlgItemMessage(_hSelf, IDC_REGEXT_LANGEXT_LIST, LB_GETTEXT, selItems[i] - i, (LPARAM)ext2Add);
+ 							addExt(ext2Add);
+ 							::SendDlgItemMessage(_hSelf, IDC_REGEXT_LANGEXT_LIST, LB_DELETESTRING, selItems[i] - i, 0);
+ 
+ 							::SendDlgItemMessage(_hSelf, IDC_REGEXT_REGISTEREDEXTS_LIST, LB_ADDSTRING, 0, (LPARAM)ext2Add);
+ 						}
+ 
+ 						delete [] selItems;
 					}
 					else
 					{
@@ -111,8 +122,9 @@ BOOL CALLBACK RegExtDlg::run_dlgProc(UINT Message, WPARAM wParam, LPARAM lParam)
 							return TRUE;
 						addExt(ext2Add);
 						::SendDlgItemMessage(_hSelf, IDC_CUSTOMEXT_EDIT, WM_SETTEXT, 0, (LPARAM)TEXT(""));
+						
+						::SendDlgItemMessage(_hSelf, IDC_REGEXT_REGISTEREDEXTS_LIST, LB_ADDSTRING, 0, (LPARAM)ext2Add);
 					}
-					::SendDlgItemMessage(_hSelf, IDC_REGEXT_REGISTEREDEXTS_LIST, LB_ADDSTRING, 0, (LPARAM)ext2Add);
 					::EnableWindow(::GetDlgItem(_hSelf, IDC_ADDFROMLANGEXT_BUTTON), false);
 					return TRUE;
 				}
@@ -120,25 +132,34 @@ BOOL CALLBACK RegExtDlg::run_dlgProc(UINT Message, WPARAM wParam, LPARAM lParam)
 				case IDC_REMOVEEXT_BUTTON :
 				{
 					TCHAR ext2Sup[extNameMax] = TEXT("");
-					int index2Sup = ::SendDlgItemMessage(_hSelf, IDC_REGEXT_REGISTEREDEXTS_LIST, LB_GETCURSEL, 0, 0);
-					::SendDlgItemMessage(_hSelf, IDC_REGEXT_REGISTEREDEXTS_LIST, LB_GETTEXT, index2Sup, (LPARAM)ext2Sup);
-					if (deleteExts(ext2Sup))
-						::SendDlgItemMessage(_hSelf, IDC_REGEXT_REGISTEREDEXTS_LIST, LB_DELETESTRING, index2Sup, 0);
-					int langIndex = ::SendDlgItemMessage(_hSelf, IDC_REGEXT_LANG_LIST, LB_GETCURSEL, 0, 0);
+					int nItems = ::SendDlgItemMessage(_hSelf, IDC_REGEXT_REGISTEREDEXTS_LIST, LB_GETSELCOUNT, 0, 0);
+					int *selItems = new int[nItems];
 
-					::EnableWindow(::GetDlgItem(_hSelf, IDC_REMOVEEXT_BUTTON), false);
+					::SendDlgItemMessage(_hSelf, IDC_REGEXT_REGISTEREDEXTS_LIST, LB_GETSELITEMS, nItems, (LPARAM)selItems);
 
-					if (langIndex != LB_ERR)
+					for (int i = 0; i < nItems; ++i)
 					{
-						for (int i = 1 ; i < nbExtMax ; ++i)
+						::SendDlgItemMessage(_hSelf, IDC_REGEXT_REGISTEREDEXTS_LIST, LB_GETTEXT, selItems[i] - i, (LPARAM)ext2Sup);
+ 						if (deleteExts(ext2Sup))
+ 							::SendDlgItemMessage(_hSelf, IDC_REGEXT_REGISTEREDEXTS_LIST, LB_DELETESTRING, selItems[i] - i, 0);
+ 						int langIndex = ::SendDlgItemMessage(_hSelf, IDC_REGEXT_LANG_LIST, LB_GETCURSEL, 0, 0);
+ 
+ 						if (langIndex != LB_ERR)
 						{
-							if (!generic_stricmp(ext2Sup, defExtArray[langIndex][i]))
+							for (int i = 1 ; i < nbExtMax ; i++)
 							{
-								::SendDlgItemMessage(_hSelf, IDC_REGEXT_LANGEXT_LIST, LB_ADDSTRING, 0, (LPARAM)ext2Sup);
-								return TRUE;
+ 								if (!generic_stricmp(ext2Sup, defExtArray[langIndex][i]))
+ 								{
+ 									::SendDlgItemMessage(_hSelf, IDC_REGEXT_LANGEXT_LIST, LB_ADDSTRING, 0, (LPARAM)ext2Sup);
+ 								}
 							}
 						}
 					}
+					
+ 					delete [] selItems;
+ 					
+ 					::EnableWindow(::GetDlgItem(_hSelf, IDC_REMOVEEXT_BUTTON), false);
+					
 					return TRUE;
 				}
 
