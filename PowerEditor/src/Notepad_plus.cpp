@@ -509,9 +509,9 @@ LRESULT Notepad_plus::init(HWND hwnd)
 	//Add recent files
 	HMENU hFileMenu = ::GetSubMenu(_mainMenuHandle, MENUINDEX_FILE);
 	int nbLRFile = pNppParam->getNbLRFile();
-	int pos = IDM_FILEMENU_LASTONE - IDM_FILE + 1 /* +1 : because of  IDM_FILE_PRINTNOW */;
+	//int pos = IDM_FILEMENU_LASTONE - IDM_FILE + 1 /* +1 : because of  IDM_FILE_PRINTNOW */;
 
-	_lastRecentFileList.initMenu(hFileMenu, IDM_FILEMENU_LASTONE + 1, pos, pNppParam->putRecentFileInSubMenu());
+	_lastRecentFileList.initMenu(hFileMenu, IDM_FILEMENU_LASTONE + 1, IDM_FILEMENU_EXISTCMDPOSITION, pNppParam->putRecentFileInSubMenu());
 	_lastRecentFileList.setLangEncoding(_nativeLangSpeaker.getLangEncoding());
 	for (int i = 0 ; i < nbLRFile ; ++i)
 	{
@@ -2204,7 +2204,6 @@ void Notepad_plus::addHotSpot()
 		{
 			style_hotspot = idStyle | mask;	// set "hotspot bit"
 			hotspotPairs.push_back(style_hotspot);
-			int activeFG = 0xFF0000;
 			unsigned char idStyleMSBunset = idStyle & ~mask;
 			char fontNameA[128];
 
@@ -2213,13 +2212,10 @@ void Notepad_plus::addHotSpot()
 			hotspotStyle._styleID = static_cast<int>(style_hotspot);
 			_pEditView->execute(SCI_STYLEGETFONT, idStyleMSBunset, (LPARAM)fontNameA);
 			TCHAR *generic_fontname = new TCHAR[128];
-#ifdef UNICODE
+
 			WcharMbcsConvertor *wmc = WcharMbcsConvertor::getInstance();
 			const wchar_t * fontNameW = wmc->char2wchar(fontNameA, _nativeLangSpeaker.getLangEncoding());
 			lstrcpy(generic_fontname, fontNameW);
-#else
-			lstrcpy(generic_fontname, fontNameA);
-#endif
 			hotspotStyle._fontName = generic_fontname;
 
 			hotspotStyle._fgColor = _pEditView->execute(SCI_STYLEGETFORE, idStyleMSBunset);
@@ -2238,6 +2234,10 @@ void Notepad_plus::addHotSpot()
 			_pEditView->setHotspotStyle(hotspotStyle);
 
 			_pEditView->execute(SCI_STYLESETHOTSPOT, style_hotspot, TRUE);
+			int activeFG = 0xFF0000;
+			Style *urlHovered = getStyleFromName(TEXT("URL hovered"));
+			if (urlHovered)
+				activeFG = urlHovered->_fgColor;
 			_pEditView->execute(SCI_SETHOTSPOTACTIVEFORE, TRUE, activeFG);
 			_pEditView->execute(SCI_SETHOTSPOTSINGLELINE, style_hotspot, 0);
 
@@ -5034,7 +5034,7 @@ void Notepad_plus::launchClipboardHistoryPanel()
 		::SendMessage(_pPublicInterface->getHSelf(), NPPM_MODELESSDIALOG, MODELESSDIALOGREMOVE, (WPARAM)_pClipboardHistoryPanel->getHSelf());
 		// define the default docking behaviour
 		data.uMask = DWS_DF_CONT_RIGHT | DWS_ICONTAB;
-		//data.hIconTab = (HICON)::LoadImage(_pPublicInterface->getHinst(), MAKEINTRESOURCE(IDI_FIND_RESULT_ICON), IMAGE_ICON, 0, 0, LR_LOADMAP3DCOLORS | LR_LOADTRANSPARENT);
+		data.hIconTab = (HICON)::LoadImage(_pPublicInterface->getHinst(), MAKEINTRESOURCE(IDR_CLIPBOARDPANEL_ICO), IMAGE_ICON, 14, 14, LR_LOADMAP3DCOLORS | LR_LOADTRANSPARENT);
 		data.pszModuleName = NPP_INTERNAL_FUCTION_STR;
 
 		// the dlgDlg should be the index of funcItem where the current function pointer is
@@ -5068,7 +5068,7 @@ void Notepad_plus::launchFileSwitcherPanel()
 		::SendMessage(_pPublicInterface->getHSelf(), NPPM_MODELESSDIALOG, MODELESSDIALOGREMOVE, (WPARAM)_pFileSwitcherPanel->getHSelf());
 		// define the default docking behaviour
 		data.uMask = DWS_DF_CONT_LEFT | DWS_ICONTAB;
-		//data.hIconTab = (HICON)::LoadImage(_pPublicInterface->getHinst(), MAKEINTRESOURCE(IDI_FIND_RESULT_ICON), IMAGE_ICON, 0, 0, LR_LOADMAP3DCOLORS | LR_LOADTRANSPARENT);
+		data.hIconTab = (HICON)::LoadImage(_pPublicInterface->getHinst(), MAKEINTRESOURCE(IDR_DOCSWITCHER_ICO), IMAGE_ICON, 14, 14, LR_LOADMAP3DCOLORS | LR_LOADTRANSPARENT);
 		data.pszModuleName = NPP_INTERNAL_FUCTION_STR;
 
 		// the dlgDlg should be the index of funcItem where the current function pointer is
@@ -5103,7 +5103,7 @@ void Notepad_plus::launchAnsiCharPanel()
 		::SendMessage(_pPublicInterface->getHSelf(), NPPM_MODELESSDIALOG, MODELESSDIALOGREMOVE, (WPARAM)_pAnsiCharPanel->getHSelf());
 		// define the default docking behaviour
 		data.uMask = DWS_DF_CONT_RIGHT | DWS_ICONTAB;
-		//data.hIconTab = (HICON)::LoadImage(_pPublicInterface->getHinst(), MAKEINTRESOURCE(IDI_FIND_RESULT_ICON), IMAGE_ICON, 0, 0, LR_LOADMAP3DCOLORS | LR_LOADTRANSPARENT);
+		data.hIconTab = (HICON)::LoadImage(_pPublicInterface->getHinst(), MAKEINTRESOURCE(IDR_ASCIIPANEL_ICO), IMAGE_ICON, 14, 14, LR_LOADMAP3DCOLORS | LR_LOADTRANSPARENT);
 		data.pszModuleName = NPP_INTERNAL_FUCTION_STR;
 
 		// the dlgDlg should be the index of funcItem where the current function pointer is
@@ -5142,7 +5142,7 @@ void Notepad_plus::launchProjectPanel(int cmdID, ProjectPanel ** pProjPanel, int
 		::SendMessage(_pPublicInterface->getHSelf(), NPPM_MODELESSDIALOG, MODELESSDIALOGREMOVE, (WPARAM)(*pProjPanel)->getHSelf());
 		// define the default docking behaviour
 		data.uMask = DWS_DF_CONT_LEFT | DWS_ICONTAB;
-		//data.hIconTab = (HICON)::LoadImage(_pPublicInterface->getHinst(), MAKEINTRESOURCE(IDI_FIND_RESULT_ICON), IMAGE_ICON, 0, 0, LR_LOADMAP3DCOLORS | LR_LOADTRANSPARENT);
+		data.hIconTab = (HICON)::LoadImage(_pPublicInterface->getHinst(), MAKEINTRESOURCE(IDR_PROJECTPANEL_ICO), IMAGE_ICON, 14, 14, LR_LOADMAP3DCOLORS | LR_LOADTRANSPARENT);
 		data.pszModuleName = NPP_INTERNAL_FUCTION_STR;
 
 		// the dlgDlg should be the index of funcItem where the current function pointer is
@@ -5183,7 +5183,7 @@ void Notepad_plus::launchDocMap()
 		::SendMessage(_pPublicInterface->getHSelf(), NPPM_MODELESSDIALOG, MODELESSDIALOGREMOVE, (WPARAM)_pDocMap->getHSelf());
 		// define the default docking behaviour
 		data.uMask = DWS_DF_CONT_RIGHT | DWS_ICONTAB;
-		//data.hIconTab = (HICON)::LoadImage(_pPublicInterface->getHinst(), MAKEINTRESOURCE(IDI_FIND_RESULT_ICON), IMAGE_ICON, 0, 0, LR_LOADMAP3DCOLORS | LR_LOADTRANSPARENT);
+		data.hIconTab = (HICON)::LoadImage(_pPublicInterface->getHinst(), MAKEINTRESOURCE(IDR_DOCMAP_ICO), IMAGE_ICON, 14, 14, LR_LOADMAP3DCOLORS | LR_LOADTRANSPARENT);
 		data.pszModuleName = NPP_INTERNAL_FUCTION_STR;
 
 		// the dlgDlg should be the index of funcItem where the current function pointer is
@@ -5222,7 +5222,7 @@ void Notepad_plus::launchFunctionList()
 		::SendMessage(_pPublicInterface->getHSelf(), NPPM_MODELESSDIALOG, MODELESSDIALOGREMOVE, (WPARAM)_pFuncList->getHSelf());
 		// define the default docking behaviour
 		data.uMask = DWS_DF_CONT_RIGHT | DWS_ICONTAB;
-		//data.hIconTab = (HICON)::LoadImage(_pPublicInterface->getHinst(), MAKEINTRESOURCE(IDI_FIND_RESULT_ICON), IMAGE_ICON, 0, 0, LR_LOADMAP3DCOLORS | LR_LOADTRANSPARENT);
+		data.hIconTab = (HICON)::LoadImage(_pPublicInterface->getHinst(), MAKEINTRESOURCE(IDR_FUNC_LIST_ICO), IMAGE_ICON, 14, 14, LR_LOADMAP3DCOLORS | LR_LOADTRANSPARENT);
 		data.pszModuleName = NPP_INTERNAL_FUCTION_STR;
 
 		// the dlgDlg should be the index of funcItem where the current function pointer is
@@ -5267,7 +5267,7 @@ struct Quote{
 	const char *_quote;
 };
 
-const int nbQuote = 161;
+const int nbQuote = 171;
 Quote quotes[nbQuote] = {
 {"Notepad++", "Good programmers use Notepad++ to code.\nExtreme programmers use MS Word to code, in Comic Sans, center aligned."},
 {"Martin Golding", "Always code as if the guy who ends up maintaining your code will be a violent psychopath who knows where you live."},
@@ -5419,6 +5419,16 @@ Quote quotes[nbQuote] = {
 {"Anonymous #117", "A Native American was asked:\n\"Do you celebrate Columbus day?\"\nHe replied:\n\"I don't know, do Jews celebrate Hitler's birthday?\""},
 {"Anonymous #118", "I love necrophilia, but i can't stand the awkward silences."},
 {"Anonymous #119", "\"I'm gonna Google that. BING that, Bing that, sorry.\"\n- The CEO of Bing (many times per day still)"},
+{"Anonymous #120", "Life is what happens to you while you're looking at your smartphone."},
+{"Anonymous #121", "Thing to do today:\n1. Get up\n2. Go back to bed"},
+{"Anonymous #122", "Nerd?\nI prefer the term \"Intellectual badass\"."},
+{"Anonymous #123", "How can you face your problem if your problem is your face?"},
+{"Anonymous #124", "YOLOLO:\nYou Only LOL Once."},
+{"Anonymous #125", "Pooping with the door opened is the meaning of true freedom."},
+{"Anonymous #126", "Social media does not make people stupid.\nIt just makes stupid people more visible."},
+{"Anonymous #127", "Don't give up your dreams.\nKeep sleeping."},
+{"Anonymous #128", "I love sleep.\nNot because I'm lazy.\nBut because my dreams are better than my real life."},
+{"Anonymous #129", "Without nipples, tits are pointless."},
 {"Barack Obama", "Yes, we scan!"},
 {"George W. Bush", "Where is my Nobel prize?\nI bombed people too."},
 {"Gandhi", "Earth provides enough to satisfy every man's need, but not every man's greed."},

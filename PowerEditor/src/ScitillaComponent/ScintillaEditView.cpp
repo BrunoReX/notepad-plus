@@ -1865,7 +1865,7 @@ void ScintillaEditView::getLine(int lineNumber, TCHAR * line, int lineBufferLen)
 	char *lineA = new char[lineBufferLen];
 	execute(SCI_GETLINE, lineNumber, (LPARAM)lineA);
 	const TCHAR *lineW = wmc->char2wchar(lineA, cp);
-	lstrcpy(line, lineW);
+	lstrcpyn(line, lineW, lineBufferLen);
 	delete [] lineA;
 }
 
@@ -2474,15 +2474,11 @@ void ScintillaEditView::columnReplace(ColumnModeInfos & cmi, const TCHAR *str)
 
 			execute(SCI_SETTARGETSTART, cmi[i]._selLpos);
 			execute(SCI_SETTARGETEND, cmi[i]._selRpos);
-			
-#ifdef UNICODE
+
 			WcharMbcsConvertor *wmc = WcharMbcsConvertor::getInstance();
 			unsigned int cp = execute(SCI_GETCODEPAGE);
 			const char *strA = wmc->wchar2char(str, cp);
 			execute(SCI_REPLACETARGET, (WPARAM)-1, (LPARAM)strA);
-#else
-			execute(SCI_REPLACETARGET, (WPARAM)-1, (LPARAM)str);
-#endif
 			
 			if (hasVirtualSpc) 
 			{
@@ -2558,14 +2554,12 @@ void ScintillaEditView::columnReplace(ColumnModeInfos & cmi, int initial, int in
 			}
 			execute(SCI_SETTARGETSTART, cmi[i]._selLpos);
 			execute(SCI_SETTARGETEND, cmi[i]._selRpos);
-#ifdef UNICODE
+
 			WcharMbcsConvertor *wmc = WcharMbcsConvertor::getInstance();
 			unsigned int cp = execute(SCI_GETCODEPAGE);
 			const char *strA = wmc->wchar2char(str, cp);
 			execute(SCI_REPLACETARGET, (WPARAM)-1, (LPARAM)strA);
-#else
-			execute(SCI_REPLACETARGET, (WPARAM)-1, (LPARAM)str);
-#endif
+
 			initial += incr;
 			if (hasVirtualSpc) 
 			{
@@ -2892,3 +2886,224 @@ void ScintillaEditView::insertNewLineBelowCurrentLine()
 	execute(SCI_SETEMPTYSELECTION, execute(SCI_POSITIONFROMLINE, current_line + 1));
 }
 
+// Get the first left index, in which the value greater/equal or smaller/equal than pivot's one
+// If not found, then pivot's index will be returned
+size_t ScintillaEditView::getLeftLineIndex(size_t leftIndex, size_t pivotIndex, bool isReverse)
+{
+	size_t i = leftIndex;
+	while (i < pivotIndex)
+	{
+		if (!isReverse)
+		{
+			size_t iLine = getGreaterLineBetween(i, pivotIndex);
+			if (iLine == pivotIndex) // pivotIndex > i
+				++i;
+			else
+				break; // Bingo!
+		}
+		else
+		{
+			size_t iLine = getGreaterLineBetween(i, pivotIndex);
+			if (iLine == pivotIndex) // pivotIndex < i
+				break; // Bingo!
+			else
+				++i;
+		}
+	}
+	return i;
+}
+
+// Get the first right index, in which the value smaller/equal or greater/equal than pivot's one
+// If not found, then pivot's index will be returned
+size_t ScintillaEditView::getRightLineIndex(size_t rightIndex, size_t pivotIndex, bool isReverse)
+{
+	size_t i = rightIndex;
+	while (i > pivotIndex)
+	{
+		if (!isReverse)
+		{
+			size_t iLine = getGreaterLineBetween(i, pivotIndex);
+			if (iLine == i) // pivotIndex > i
+				i--;
+			else
+				break; // Bingo!
+		}
+		else
+		{
+			size_t iLine = getGreaterLineBetween(i, pivotIndex);
+			if (iLine == i) // pivotIndex < i
+				break; // Bingo!
+			else
+				i--;
+		}
+	}
+	return i;
+}
+
+size_t ScintillaEditView::getGreaterLineBetween(size_t l1, size_t l2)
+{
+	int line1Len = execute(SCI_LINELENGTH, l1);
+	int	line2Len = execute(SCI_LINELENGTH, l2); 
+
+	char *line1text = new char[line1Len + 1];
+	char *line2text = new char[line2Len + 1];
+	execute(SCI_GETLINE, l1, (LPARAM)line1text);
+	line1text[line1Len] = '\0';
+	execute(SCI_GETLINE, l2, (LPARAM)line2text);
+	line2text[line2Len] = '\0';
+
+	string s1 = line1text;
+	string s2 = line2text;
+
+	size_t res;
+	if (s1.compare(s2) > 0)
+		res = l1;
+	else
+		res = l2;
+
+	delete[] line1text;
+	delete[] line2text;
+
+	return res;
+}
+
+size_t ScintillaEditView::getRandomPivot(size_t fromLine, size_t toLine)
+{
+	srand((unsigned int)time(NULL));
+	return rand() % (toLine - fromLine) + fromLine;
+}
+
+
+void ScintillaEditView::quickSortLines(size_t fromLine, size_t toLine, bool isReverse)
+{
+	if (fromLine >= toLine)
+		return;
+
+	// choose the pivot
+	size_t pivotIndex = getRandomPivot(fromLine, toLine);
+
+	// comparing right with left
+	size_t leftIndex = fromLine;
+	size_t rightIndex = toLine;
+
+	while (rightIndex > leftIndex)
+	{
+		leftIndex = getLeftLineIndex(leftIndex, pivotIndex, isReverse); // get the first left index, in which the value greater or equal than pivot's one
+		rightIndex = getRightLineIndex(rightIndex, pivotIndex, isReverse); // get the first right index, in which the value smaller or equal than pivot's one
+
+		if ((leftIndex != rightIndex) && swapLines(leftIndex, rightIndex))
+		{
+			if (leftIndex == pivotIndex)
+			{
+				pivotIndex = rightIndex;
+				++leftIndex;
+			}
+			else if (rightIndex == pivotIndex)
+			{
+				pivotIndex = leftIndex;
+				--rightIndex;
+			}
+			else
+			{
+				++leftIndex;
+				--rightIndex;	
+			}
+		}
+		
+	}
+
+	// check the left side recursively
+	if (pivotIndex != fromLine)
+		quickSortLines(fromLine, pivotIndex - 1, isReverse);
+
+	// check the right side recursively
+	if (pivotIndex != toLine)
+		quickSortLines(pivotIndex + 1, toLine, isReverse);
+}
+
+
+bool ScintillaEditView::swapLines(size_t line1, size_t line2)
+{
+	size_t lowerLine = line1;
+	size_t higherLine = line2;
+
+	if (lowerLine == higherLine)
+		return false;
+
+	if (line1 > line2)
+	{
+		lowerLine = line2;
+		higherLine = line1;
+	}
+
+	size_t nbLine = execute(SCI_GETLINECOUNT);
+	if (higherLine + 1 > nbLine)
+		return false;
+
+	bool isLastLine = false;
+	int eol_mode = SC_EOL_CRLF;
+	size_t extraEOLLength = 0;
+	if (higherLine + 1 == nbLine)
+	{
+		isLastLine = true;
+
+		eol_mode = int(execute(SCI_GETEOLMODE));
+
+		if(eol_mode == SC_EOL_CRLF)
+			extraEOLLength = 2;
+		else if(eol_mode == SC_EOL_LF)
+			extraEOLLength = 1;
+		else // SC_EOL_CR
+			extraEOLLength = 1;
+	}
+
+	int line1Len = execute(SCI_LINELENGTH, lowerLine);
+	int	line2Len = execute(SCI_LINELENGTH, higherLine); 
+
+	char *line1text = new char[line1Len + 1 ];
+	char *line2text = new char[line2Len + 1 + extraEOLLength];
+	execute(SCI_GETLINE, lowerLine, (LPARAM)line1text);
+	line1text[line1Len - extraEOLLength] = '\0';
+	execute(SCI_GETLINE, higherLine, (LPARAM)line2text);
+	if (isLastLine)
+	{
+		if (eol_mode == SC_EOL_CRLF)
+		{
+			line2text[line2Len] = '\r';
+			line2text[line2Len + 1] = '\n';	
+			line2text[line2Len + 2] = '\0';	
+		}
+		else if (eol_mode == SC_EOL_LF)
+		{
+			line2text[line2Len] = '\n';
+			line2text[line2Len + 1] = '\0';
+		}
+		else // SC_EOL_CR
+		{
+			line2text[line2Len] = '\r';
+			line2text[line2Len + 1] = '\0';
+		}
+		
+	}
+	else
+		line2text[line2Len] = '\0';
+
+	size_t posFrom1, posTo1, posFrom2, posTo2;
+	posFrom1 = execute(SCI_POSITIONFROMLINE, lowerLine);
+	posFrom2 = execute(SCI_POSITIONFROMLINE, higherLine);
+	posTo1 = posFrom1 + line1Len;
+	posTo2 = posFrom2 + line2Len;
+
+	execute(SCI_SETTARGETSTART, posFrom2);
+	execute(SCI_SETTARGETEND, posTo2);
+	execute(SCI_REPLACETARGET, (WPARAM)-1, (LPARAM)line1text);
+
+	execute(SCI_SETTARGETSTART, posFrom1);
+	execute(SCI_SETTARGETEND, posTo1);
+	execute(SCI_REPLACETARGET, (WPARAM)-1, (LPARAM)line2text);
+
+	delete[] line1text;
+	delete[] line2text;
+
+	return true;
+}

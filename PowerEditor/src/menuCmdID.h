@@ -32,6 +32,7 @@
 #define    IDM    40000
 
 #define    IDM_FILE    (IDM + 1000)
+// IMPORTANT: If list below is modified, you have to change the value of IDM_FILEMENU_LASTONE and IDM_FILEMENU_EXISTCMDPOSITION
     #define    IDM_FILE_NEW                     (IDM_FILE + 1)
     #define    IDM_FILE_OPEN                    (IDM_FILE + 2)
     #define    IDM_FILE_CLOSE                   (IDM_FILE + 3)
@@ -51,9 +52,38 @@
     #define    IDM_FILE_DELETE                  (IDM_FILE + 16)
     #define    IDM_FILE_RENAME                  (IDM_FILE + 17)
     #define    IDM_FILE_CLOSEALL_TORIGHT        (IDM_FILE + 18)
+    #define    IDM_FILE_OPEN_FOLDER             (IDM_FILE + 19)
+    #define    IDM_FILE_OPEN_CMD                (IDM_FILE + 20)
+// IMPORTANT: If list above is modified, you have to change the following values:
  
- // To be updated if new menu item(s) is (are) added in menu "File"
-    #define    IDM_FILEMENU_LASTONE             IDM_FILE_CLOSEALL_TORIGHT
+// To be updated if new menu item(s) is (are) added in menu "File"
+    #define    IDM_FILEMENU_LASTONE             IDM_FILE_OPEN_CMD
+	
+// 0 based position of command "Exit" including the bars in the file menu
+// and without counting "Recent files history" items
+
+// 0  New
+// 1  Open...
+// 2  Open Folder
+// 3  Reload from Disk
+// 4  Save
+// 5  Save As...
+// 6  Save a Copy As...
+// 7  Save All
+// 8  Rename...
+// 9  Close
+//10  Close All
+//11  Close More
+//12  Move to Recycle Bin
+//13  --------
+//14  Load Session...
+//15  Save Session...
+//16  --------
+//17  Print...
+//18  Print Now
+//19  --------
+//20  Exit
+    #define    IDM_FILEMENU_EXISTCMDPOSITION    20 
  
 #define    IDM_EDIT       (IDM + 2000)
     #define    IDM_EDIT_CUT                         (IDM_EDIT + 1) 
@@ -63,7 +93,7 @@
     #define    IDM_EDIT_PASTE                       (IDM_EDIT + 5)
     #define    IDM_EDIT_DELETE                      (IDM_EDIT + 6)
     #define    IDM_EDIT_SELECTALL                   (IDM_EDIT + 7)
-	#define    IDM_EDIT_BEGINENDSELECT				(IDM_EDIT + 20)
+    #define    IDM_EDIT_BEGINENDSELECT              (IDM_EDIT + 20)
     
     #define    IDM_EDIT_INS_TAB                     (IDM_EDIT + 8)
     #define    IDM_EDIT_RMV_TAB                     (IDM_EDIT + 9)
@@ -75,10 +105,12 @@
     #define    IDM_EDIT_LINE_DOWN                   (IDM_EDIT + 15)
     #define    IDM_EDIT_UPPERCASE                   (IDM_EDIT + 16)
     #define    IDM_EDIT_LOWERCASE                   (IDM_EDIT + 17)
-	#define    IDM_EDIT_REMOVEEMPTYLINES            (IDM_EDIT + 55)
-	#define    IDM_EDIT_REMOVEEMPTYLINESWITHBLANK   (IDM_EDIT + 56)
-	#define    IDM_EDIT_BLANKLINEABOVECURRENT		(IDM_EDIT + 57)
-	#define    IDM_EDIT_BLANKLINEBELOWCURRENT		(IDM_EDIT + 58)
+    #define    IDM_EDIT_REMOVEEMPTYLINES            (IDM_EDIT + 55)
+    #define    IDM_EDIT_REMOVEEMPTYLINESWITHBLANK   (IDM_EDIT + 56)
+    #define    IDM_EDIT_BLANKLINEABOVECURRENT       (IDM_EDIT + 57)
+    #define    IDM_EDIT_BLANKLINEBELOWCURRENT       (IDM_EDIT + 58)
+    #define    IDM_EDIT_SORTLINES                   (IDM_EDIT + 59)
+    #define    IDM_EDIT_SORTLINESREVERSE            (IDM_EDIT + 60)
 
 // Menu macro
     #define    IDM_MACRO_STARTRECORDINGMACRO        (IDM_EDIT + 18)
@@ -96,7 +128,7 @@
     #define    IDM_EDIT_TAB2SW                      (IDM_EDIT + 46)
     #define    IDM_EDIT_SW2TAB_LEADING              (IDM_EDIT + 53)
     #define    IDM_EDIT_SW2TAB_ALL                  (IDM_EDIT + 54)
-	#define    IDM_EDIT_STREAM_UNCOMMENT            (IDM_EDIT + 47)
+    #define    IDM_EDIT_STREAM_UNCOMMENT            (IDM_EDIT + 47)
 
 // Menu macro
     #define    IDM_MACRO_SAVECURRENTMACRO           (IDM_EDIT + 25)
@@ -117,19 +149,19 @@
     #define    IDM_EDIT_COLUMNMODE                  (IDM_EDIT + 34)
     #define    IDM_EDIT_BLOCK_COMMENT_SET           (IDM_EDIT + 35)
     #define    IDM_EDIT_BLOCK_UNCOMMENT             (IDM_EDIT + 36)
-	#define    IDM_EDIT_COLUMNMODETIP               (IDM_EDIT + 37)
-	#define    IDM_EDIT_PASTE_AS_HTML               (IDM_EDIT + 38)
-	#define    IDM_EDIT_PASTE_AS_RTF                (IDM_EDIT + 39)
-	#define    IDM_EDIT_COPY_BINARY                 (IDM_EDIT + 48)
-	#define    IDM_EDIT_CUT_BINARY                  (IDM_EDIT + 49)
-	#define    IDM_EDIT_PASTE_BINARY                (IDM_EDIT + 50)
-	#define    IDM_EDIT_CHAR_PANEL                  (IDM_EDIT + 51)
-	#define    IDM_EDIT_CLIPBOARDHISTORY_PANEL      (IDM_EDIT + 52)
+    #define    IDM_EDIT_COLUMNMODETIP               (IDM_EDIT + 37)
+    #define    IDM_EDIT_PASTE_AS_HTML               (IDM_EDIT + 38)
+    #define    IDM_EDIT_PASTE_AS_RTF                (IDM_EDIT + 39)
+    #define    IDM_EDIT_COPY_BINARY                 (IDM_EDIT + 48)
+    #define    IDM_EDIT_CUT_BINARY                  (IDM_EDIT + 49)
+    #define    IDM_EDIT_PASTE_BINARY                (IDM_EDIT + 50)
+    #define    IDM_EDIT_CHAR_PANEL                  (IDM_EDIT + 51)
+    #define    IDM_EDIT_CLIPBOARDHISTORY_PANEL      (IDM_EDIT + 52)
 
     #define    IDM_EDIT_AUTOCOMPLETE                (50000 + 0)
     #define    IDM_EDIT_AUTOCOMPLETE_CURRENTFILE    (50000 + 1)
     #define    IDM_EDIT_FUNCCALLTIP                 (50000 + 2)
-	#define    IDM_EDIT_AUTOCOMPLETE_PATH			(50000 + 6)
+    #define    IDM_EDIT_AUTOCOMPLETE_PATH           (50000 + 6)
     
     //Belong to MENU FILE
     #define    IDM_OPEN_ALL_RECENT_FILE             (IDM_EDIT + 40)
