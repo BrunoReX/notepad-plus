@@ -516,29 +516,7 @@ public:
 		}
 	}
 
-	void updateLineNumberWidth() {
-		if (_lineNumbersShown)
-		{
-			int linesVisible = (int) execute(SCI_LINESONSCREEN);
-			if (linesVisible)
-			{
-				int firstVisibleLineVis = (int) execute(SCI_GETFIRSTVISIBLELINE);
-				int lastVisibleLineVis = linesVisible + firstVisibleLineVis + 1;
-				int lastVisibleLineDoc = (int) execute(SCI_DOCLINEFROMVISIBLE, lastVisibleLineVis);
-				int i = 0;
-				while (lastVisibleLineDoc)
-				{
-					lastVisibleLineDoc /= 10;
-					++i;
-				}
-				i = max(i, 3);
-				{
-					int pixelWidth = int(8 + i * execute(SCI_TEXTWIDTH, STYLE_LINENUMBER, (LPARAM)"8"));
-					execute(SCI_SETMARGINWIDTHN, _SC_MARGE_LINENUMBER, pixelWidth);
-				}
-			}
-		}
-	};
+	void updateLineNumberWidth();
 
 	void setCurrentLineHiLiting(bool isHiliting, COLORREF bgColor) const {
 		execute(SCI_SETCARETLINEVISIBLE, isHiliting);
@@ -667,33 +645,7 @@ protected:
 
     static const int _markersArray[][NB_FOLDER_STATE];
 
-	static LRESULT CALLBACK scintillaStatic_Proc(HWND hwnd, UINT Message, WPARAM wParam, LPARAM lParam) {
-		ScintillaEditView *pScint = (ScintillaEditView *)(::GetWindowLongPtr(hwnd, GWL_USERDATA));
-		//
-		if (Message == WM_MOUSEWHEEL || Message == WM_MOUSEHWHEEL)
-		{			
-			POINT pt;
-			POINTS pts = MAKEPOINTS(lParam);
-			POINTSTOPOINT(pt, pts);
-			HWND hwndOnMouse = WindowFromPoint(pt);
-
-			//Hack for Synaptics TouchPad Driver
-			char synapticsHack[26];
-			GetClassNameA(hwndOnMouse, (LPSTR)&synapticsHack, 26);
-			if (std::string(synapticsHack) == "SynTrackCursorWindowClass")
-				return (pScint->scintillaNew_Proc(hwnd, Message, wParam, lParam));
-
-			ScintillaEditView *pScintillaOnMouse = (ScintillaEditView *)(::GetWindowLongPtr(hwndOnMouse, GWL_USERDATA));
-			if (pScintillaOnMouse != pScint)
-				return ::SendMessage(hwndOnMouse, Message, wParam, lParam);
-		}
-		if (pScint)
-			return (pScint->scintillaNew_Proc(hwnd, Message, wParam, lParam));
-		else
-			return ::DefWindowProc(hwnd, Message, wParam, lParam);
-		//
-	};
-
+	static LRESULT CALLBACK scintillaStatic_Proc(HWND hwnd, UINT Message, WPARAM wParam, LPARAM lParam);
 	LRESULT scintillaNew_Proc(HWND hwnd, UINT Message, WPARAM wParam, LPARAM lParam);
 
 	SCINTILLA_FUNC _pScintillaFunc;

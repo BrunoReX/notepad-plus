@@ -272,6 +272,36 @@ void ScintillaEditView::init(HINSTANCE hInst, HWND hPere)
 	attachDefaultDoc();
 }
 
+LRESULT CALLBACK ScintillaEditView::scintillaStatic_Proc(HWND hwnd, UINT Message, WPARAM wParam, LPARAM lParam)
+{
+	ScintillaEditView *pScint = (ScintillaEditView *)(::GetWindowLongPtr(hwnd, GWL_USERDATA));
+
+	if (Message == WM_MOUSEWHEEL || Message == WM_MOUSEHWHEEL)
+	{			
+		POINT pt;
+		POINTS pts = MAKEPOINTS(lParam);
+		POINTSTOPOINT(pt, pts);
+		HWND hwndOnMouse = WindowFromPoint(pt);
+
+		//Hack for Synaptics TouchPad Driver
+		char synapticsHack[26];
+		GetClassNameA(hwndOnMouse, (LPSTR)&synapticsHack, 26);
+		bool isSynpnatic = std::string(synapticsHack) == "SynTrackCursorWindowClass";
+		bool makeTouchPadCompetible = ((NppParameters::getInstance())->getSVP())._disableAdvancedScrolling;
+
+		if (isSynpnatic || makeTouchPadCompetible)
+			return (pScint->scintillaNew_Proc(hwnd, Message, wParam, lParam));
+
+		ScintillaEditView *pScintillaOnMouse = (ScintillaEditView *)(::GetWindowLongPtr(hwndOnMouse, GWL_USERDATA));
+		if (pScintillaOnMouse != pScint)
+			return ::SendMessage(hwndOnMouse, Message, wParam, lParam);
+	}
+	if (pScint)
+		return (pScint->scintillaNew_Proc(hwnd, Message, wParam, lParam));
+	else
+		return ::DefWindowProc(hwnd, Message, wParam, lParam);
+
+}
 LRESULT ScintillaEditView::scintillaNew_Proc(HWND hwnd, UINT Message, WPARAM wParam, LPARAM lParam) 
 {
 	switch (Message)
@@ -598,7 +628,7 @@ void ScintillaEditView::setUserLexer(const TCHAR *userLangName)
 	int setKeywordsCounter = 0;
     execute(SCI_SETLEXER, SCLEX_USER);
 
-	UserLangContainer * userLangContainer = userLangName?NppParameters::getInstance()->getULCFromName(userLangName):_userDefineDlg._pCurrentUserLang;
+	UserLangContainer * userLangContainer = userLangName?_pParameter->getULCFromName(userLangName):_userDefineDlg._pCurrentUserLang;
 
 	if (!userLangContainer)
 		return;
@@ -726,7 +756,7 @@ void ScintillaEditView::setUserLexer(const TCHAR *userLangName)
 void ScintillaEditView::setExternalLexer(LangType typeDoc)
 {
 	int id = typeDoc - L_EXTERNAL;
-	TCHAR * name = NppParameters::getInstance()->getELCFromIndex(id)._name;
+	TCHAR * name = _pParameter->getELCFromIndex(id)._name;
 	
 	WcharMbcsConvertor *wmc = WcharMbcsConvertor::getInstance();
 	const char *pName = wmc->wchar2char(name, CP_ACP);
@@ -1142,8 +1172,7 @@ void ScintillaEditView::defineDocType(LangType typeDoc)
 		}
 	}
 
-	NppParameters *pNppParam = NppParameters::getInstance();
-	ScintillaViewParams & svp = (ScintillaViewParams &)pNppParam->getSVP();
+	ScintillaViewParams & svp = (ScintillaViewParams &)_pParameter->getSVP();
 	if (svp._folderStyle != FOLDER_STYLE_NONE)
 		showMargin(_SC_MARGE_FOLDER, isNeededFolderMarge(typeDoc));
 
@@ -1332,7 +1361,7 @@ void ScintillaEditView::defineDocType(LangType typeDoc)
 
 		case L_TEXT :
 		default :
-			if (typeDoc >= L_EXTERNAL && typeDoc < NppParameters::getInstance()->L_END)
+			if (typeDoc >= L_EXTERNAL && typeDoc < _pParameter->L_END)
 				setExternalLexer(typeDoc);
 			else
 				execute(SCI_SETLEXER, (_codepage == CP_CHINESE_TRADITIONAL)?SCLEX_MAKEFILE:SCLEX_NULL);
@@ -2112,6 +2141,47 @@ void ScintillaEditView::setLineIndent(int line, int indent) const {
 	execute(SCI_SETSEL, crange.cpMin, crange.cpMax);
 }
 
+void ScintillaEditView::updateLineNumberWidth() 
+{
+	if (_lineNumbersShown)
+	{
+		int linesVisible = (int) execute(SCI_LINESONSCREEN);
+		if (linesVisible)
+		{
+			int firstVisibleLineVis = (int) execute(SCI_GETFIRSTVISIBLELINE);
+			int lastVisibleLineVis = linesVisible + firstVisibleLineVis + 1;
+
+			if (execute(SCI_GETWRAPMODE) != SC_WRAP_NONE)
+			{
+				int numLinesDoc = (int) execute(SCI_GETLINECOUNT);
+				int prevLineDoc = (int) execute(SCI_DOCLINEFROMVISIBLE, firstVisibleLineVis);
+				for (int i = firstVisibleLineVis + 1; i <= lastVisibleLineVis; ++i)
+				{
+					int lineDoc = (int) execute(SCI_DOCLINEFROMVISIBLE, i);
+					if (lineDoc == numLinesDoc)
+						break;
+					if (lineDoc == prevLineDoc)
+						lastVisibleLineVis++;
+					prevLineDoc = lineDoc;
+				}
+			}
+
+			int lastVisibleLineDoc = (int) execute(SCI_DOCLINEFROMVISIBLE, lastVisibleLineVis);
+			int i = 0;
+
+			while (lastVisibleLineDoc)
+			{
+				lastVisibleLineDoc /= 10;
+				++i;
+			}
+
+			i = max(i, 3);
+			int pixelWidth = int(8 + i * execute(SCI_TEXTWIDTH, STYLE_LINENUMBER, (LPARAM)"8"));
+			execute(SCI_SETMARGINWIDTHN, _SC_MARGE_LINENUMBER, pixelWidth);
+		}
+	}
+}
+
 const char * ScintillaEditView::getCompleteKeywordList(std::basic_string<char> & kwl, LangType langType, int keywordIndex)
 {
 	kwl += " ";
@@ -2175,11 +2245,12 @@ void ScintillaEditView::currentLineDown() const
 	}
 }
 
-
+// Get selection range : (fromLine, toLine) 
+// return (-1, -1) if multi-selection
 pair<int, int> ScintillaEditView::getSelectionLinesRange() const
 {
     pair<int, int> range(-1, -1);
-    if (execute(SCI_GETSELECTIONS) > 1)
+    if (execute(SCI_GETSELECTIONS) > 1) // multi-selection
         return range;
     int start = execute(SCI_GETSELECTIONSTART);
     int end = execute(SCI_GETSELECTIONEND);
@@ -2824,7 +2895,7 @@ void ScintillaEditView::setTabSettings(Lang *lang)
     }
     else
     {
-        const NppGUI & nppgui = (NppParameters::getInstance())->getNppGUI();
+        const NppGUI & nppgui = _pParameter->getNppGUI();
         execute(SCI_SETTABWIDTH, nppgui._tabSize);
 		execute(SCI_SETUSETABS, !nppgui._tabReplacedBySpace);
     }

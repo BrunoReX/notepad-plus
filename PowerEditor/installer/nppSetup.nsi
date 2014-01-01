@@ -28,10 +28,10 @@
 ; Define the application name
 !define APPNAME "Notepad++"
 
-!define APPVERSION "6.5.2"
+!define APPVERSION "6.5.3"
 !define APPNAMEANDVERSION "${APPNAME} v${APPVERSION}"
 !define VERSION_MAJOR 6
-!define VERSION_MINOR 52
+!define VERSION_MINOR 53
 
 !define APPWEBSITE "http://notepad-plus-plus.org/"
 
@@ -451,6 +451,7 @@ Section -"Notepad++" mainSection
 	File "..\bin\langs.model.xml"
 	File "..\bin\config.model.xml"
 	File "..\bin\stylers.model.xml"
+	File "..\bin\contextMenu.xml"
 	File "..\bin\functionList.xml"
 
 	SetOverwrite off
@@ -755,11 +756,6 @@ SectionGroup "Plugins" Plugins
 		SetOutPath "$INSTDIR\plugins"
 		File "..\bin\plugins\DSpellCheck.dll"
 		SetOutPath "$UPDATE_PATH\plugins\Config"
-/*
-	SetOverwrite off
-		File "..\bin\plugins\Config\DSpellCheck.ini"
-	SetOverwrite on
-*/
 		SetOutPath "$INSTDIR\plugins\Config\Hunspell"
 		File "..\bin\plugins\Config\Hunspell\dictionary.lst"
 		File "..\bin\plugins\Config\Hunspell\en_GB.aff"
@@ -796,6 +792,12 @@ SectionGroup "Plugins" Plugins
 		File "..\bin\plugins\PluginManager.dll"
 		SetOutPath "$INSTDIR\updater"
 		File "..\bin\updater\gpup.exe"
+	SectionEnd
+	
+	Section "Mime Tools" MimeTools
+		Delete "$INSTDIR\plugins\mimeTools.dll"
+		SetOutPath "$INSTDIR\plugins"
+		File "..\bin\plugins\mimeTools.dll"
 	SectionEnd
 	
 	Section "Converter" Converter
@@ -1025,6 +1027,9 @@ SectionGroup "Localization" localization
 	SectionEnd
 	Section /o "Uyghur" uyghur
 		CopyFiles "$TEMP\nppLocalization\uyghur.xml" "$INSTDIR\localization\uyghur.xml"
+	SectionEnd
+	Section /o "Vietnamese" vietnamese
+		CopyFiles "$TEMP\nppLocalization\vietnamese.xml" "$INSTDIR\localization\vietnamese.xml"
 	SectionEnd
 SectionGroupEnd
 
@@ -1411,6 +1416,9 @@ SectionGroup un.Plugins
 	Section un.Converter
 		Delete "$INSTDIR\plugins\NppConverter.dll"
 	SectionEnd
+	Section un.MimeTools
+		Delete "$INSTDIR\plugins\mimeTools.dll"
+	SectionEnd
 	Section un.PluginManager
 		Delete "$INSTDIR\plugins\PluginManager.dll"
 		Delete "$INSTDIR\updater\gpup.exe"
@@ -1725,8 +1733,10 @@ SectionGroup un.localization
 	Section un.uyghur
 		Delete "$INSTDIR\localization\uyghur.xml"
 	SectionEnd
+	Section un.vietnamese
+		Delete "$INSTDIR\localization\vietnamese.xml"
+	SectionEnd
 
-	
 SectionGroupEnd
 
 
