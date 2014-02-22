@@ -29,6 +29,11 @@
 #include "precompiledHeaders.h"
 #include "VerticalFileSwitcherListView.h"
 #include "Buffer.h"
+#include "localization.h"
+
+#define FS_ROOTNODE					"DocSwitcher"
+#define FS_CLMNNAME					"ColumnName"
+#define FS_CLMNEXT					"ColumnExt"
 
 void VerticalFileSwitcherListView::init(HINSTANCE hInst, HWND parent, HIMAGELIST hImaLst)
 {
@@ -94,7 +99,21 @@ LRESULT VerticalFileSwitcherListView::runProc(HWND hwnd, UINT Message, WPARAM wP
 void VerticalFileSwitcherListView::initList()
 {
 	TaskListInfo taskListInfo;
-	::SendMessage(::GetParent(_hParent), WM_GETTASKLISTINFO, (WPARAM)&taskListInfo, TRUE);
+	static HWND nppHwnd = ::GetParent(_hParent);
+	::SendMessage(nppHwnd, WM_GETTASKLISTINFO, (WPARAM)&taskListInfo, TRUE);
+
+	NppParameters *nppParams = NppParameters::getInstance();
+	NativeLangSpeaker *pNativeSpeaker = nppParams->getNativeLangSpeaker();
+	generic_string nameStr = pNativeSpeaker->getAttrNameStr(TEXT("Name"), FS_ROOTNODE, FS_CLMNNAME);
+	insertColumn(nameStr.c_str(), 150, 0);
+
+	bool isExtColumn = !nppParams->getNppGUI()._fileSwitcherWithoutExtColumn;
+	if (isExtColumn)
+	{
+		generic_string extStr = pNativeSpeaker->getAttrNameStr(TEXT("Ext."), FS_ROOTNODE, FS_CLMNEXT);
+		insertColumn(extStr.c_str(), 50, 1);
+	}
+
 	for (size_t i = 0, len = taskListInfo._tlfsLst.size(); i < len ; ++i)
 	{
 		TaskLstFnStatus & fileNameStatus = taskListInfo._tlfsLst[i];
@@ -103,8 +122,11 @@ void VerticalFileSwitcherListView::initList()
 
 		TCHAR fn[MAX_PATH];
 		lstrcpy(fn, ::PathFindFileName(fileNameStatus._fn.c_str()));
-		::PathRemoveExtension(fn);
 
+		if (isExtColumn)
+		{
+			::PathRemoveExtension(fn);
+		}
 		LVITEM item;
 		item.mask = LVIF_TEXT | LVIF_IMAGE | LVIF_PARAM;
 		
@@ -114,8 +136,17 @@ void VerticalFileSwitcherListView::initList()
 		item.iImage = fileNameStatus._status;
 		item.lParam = (LPARAM)tl;
 		ListView_InsertItem(_hSelf, &item);
-		ListView_SetItemText(_hSelf, i, 1, (LPTSTR)::PathFindExtension(fileNameStatus._fn.c_str()));
+		if (isExtColumn)
+		{
+			ListView_SetItemText(_hSelf, i, 1, (LPTSTR)::PathFindExtension(fileNameStatus._fn.c_str()));
+		}
 	}
+}
+
+void VerticalFileSwitcherListView::reload()
+{
+	removeAll();
+	initList();
 }
 
 int VerticalFileSwitcherListView::getBufferInfoFromIndex(int index, int & view) const
@@ -150,8 +181,11 @@ void VerticalFileSwitcherListView::setItemIconStatus(int bufferID)
 	
 	TCHAR fn[MAX_PATH];
 	lstrcpy(fn, ::PathFindFileName(buf->getFileName()));
-	::PathRemoveExtension(fn);
-
+	bool isExtColumn = !(NppParameters::getInstance())->getNppGUI()._fileSwitcherWithoutExtColumn;
+	if (isExtColumn)
+	{
+		::PathRemoveExtension(fn);
+	}
 	LVITEM item;
 	item.pszText = fn;
 	item.iSubItem = 0;
@@ -169,7 +203,12 @@ void VerticalFileSwitcherListView::setItemIconStatus(int bufferID)
 		{
 			item.mask = LVIF_TEXT | LVIF_IMAGE;
 			ListView_SetItem(_hSelf, &item);
-			ListView_SetItemText(_hSelf, i, 1, (LPTSTR)::PathFindExtension(buf->getFileName()));
+
+			if (isExtColumn)
+			{
+				ListView_SetItemText(_hSelf, i, 1, (LPTSTR)::PathFindExtension(buf->getFileName()));
+
+			}
 		}
 	}
 }
@@ -222,8 +261,11 @@ int VerticalFileSwitcherListView::add(int bufferID, int iView)
 
 	TCHAR fn[MAX_PATH];
 	lstrcpy(fn, ::PathFindFileName(fileName));
-	::PathRemoveExtension(fn);
-
+	bool isExtColumn = !(NppParameters::getInstance())->getNppGUI()._fileSwitcherWithoutExtColumn;
+	if (isExtColumn)
+	{
+		::PathRemoveExtension(fn);
+	}
 	LVITEM item;
 	item.mask = LVIF_TEXT | LVIF_IMAGE | LVIF_PARAM;
 	
@@ -233,8 +275,11 @@ int VerticalFileSwitcherListView::add(int bufferID, int iView)
 	item.iImage = buf->getUserReadOnly()||buf->getFileReadOnly()?2:(buf->isDirty()?1:0);
 	item.lParam = (LPARAM)tl;
 	ListView_InsertItem(_hSelf, &item);
-	
-	ListView_SetItemText(_hSelf, index, 1, ::PathFindExtension(fileName));
+
+	if (isExtColumn)
+	{
+		ListView_SetItemText(_hSelf, index, 1, ::PathFindExtension(fileName));
+	}
 	ListView_SetItemState(_hSelf, index, LVIS_FOCUSED|LVIS_SELECTED, LVIS_FOCUSED|LVIS_SELECTED);
 	
 	return index;
@@ -250,6 +295,16 @@ void VerticalFileSwitcherListView::remove(int index)
 	TaskLstFnStatus *tlfs = (TaskLstFnStatus *)item.lParam;
 	delete tlfs;
 	ListView_DeleteItem(_hSelf, index);
+}
+
+void VerticalFileSwitcherListView::removeAll()
+{
+	int nbItem = ListView_GetItemCount(_hSelf);
+	
+	for (int i = nbItem - 1; i >= 0 ; --i)
+	{
+		remove(i);
+	}
 }
 
 int VerticalFileSwitcherListView::find(int bufferID, int iView) const

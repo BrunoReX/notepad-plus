@@ -30,6 +30,7 @@
 #include "ShortcutMapper.h"
 #include "Notepad_plus.h"
 
+
 void ShortcutMapper::initTabs() {
 	HWND hTab = _hTabCtrl = ::GetDlgItem(_hSelf, IDC_BABYGRID_TABBAR);
 	TCITEM tie;
@@ -48,6 +49,16 @@ void ShortcutMapper::initTabs() {
     TabCtrl_SetCurSel(_hTabCtrl, int(_currentState));
 }
 
+void ShortcutMapper::getClientRect(RECT & rc) const 
+{
+		Window::getClientRect(rc);
+
+		rc.top += NppParameters::getInstance()->_dpiManager.scaleY(40);
+		rc.bottom -= NppParameters::getInstance()->_dpiManager.scaleY(20);
+		rc.left += NppParameters::getInstance()->_dpiManager.scaleX(5);
+
+}
+
 void ShortcutMapper::translateTab(int index, const TCHAR * newname) {
 	if (index < 0 || index > 4)
 		return;
@@ -59,7 +70,7 @@ void ShortcutMapper::initBabyGrid() {
 	getClientRect(rect);
 	
 	_babygrid.init(_hInst, _hSelf, IDD_BABYGRID_ID1);
-	//_babygrid.reSizeTo(rect);
+	
 	_babygrid.reSizeToWH(rect);
 	_babygrid.hideCursor();
 	_babygrid.makeColAutoWidth();

@@ -41,9 +41,9 @@
 #include "shortcut.h"
 #endif// SHORTCUTS_H
 
-#ifndef CONTEXTMENU
+#ifndef CONTEXTMENU_H
 #include "ContextMenu.h"
-#endif// CONTEXTMENU
+#endif// CONTEXTMENU_H
 
 enum GridState {STATE_MENU, STATE_MACRO, STATE_USER, STATE_PLUGIN, STATE_SCINTILLA};
 
@@ -75,13 +75,7 @@ public:
 		else
 			::DialogBoxParam(_hInst, MAKEINTRESOURCE(IDD_SHORTCUTMAPPER_DLG), _hParent, (DLGPROC)dlgProc, (LPARAM)this);
 	};
-	void getClientRect(RECT & rc) const {
-		Window::getClientRect(rc);
-		rc.top += 40;
-		rc.bottom -= 20;
-		rc.left += 5;
-	};
-
+	void getClientRect(RECT & rc) const;
 	void translateTab(int index, const TCHAR * newname);
 
 protected :

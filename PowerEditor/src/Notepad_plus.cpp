@@ -253,7 +253,8 @@ LRESULT Notepad_plus::init(HWND hwnd)
 
 	int tabBarStatus = nppGUI._tabStatus;
 	_toReduceTabBar = ((tabBarStatus & TAB_REDUCE) != 0);
-	_docTabIconList.create(_toReduceTabBar?13:20, _pPublicInterface->getHinst(), docTabIconIDs, sizeof(docTabIconIDs)/sizeof(int));
+	int iconDpiDynamicalSize = NppParameters::getInstance()->_dpiManager.scaleY(_toReduceTabBar?13:20);
+	_docTabIconList.create(iconDpiDynamicalSize, _pPublicInterface->getHinst(), docTabIconIDs, sizeof(docTabIconIDs)/sizeof(int));
 
 	_mainDocTab.init(_pPublicInterface->getHinst(), hwnd, &_mainEditView, &_docTabIconList);
 	_subDocTab.init(_pPublicInterface->getHinst(), hwnd, &_subEditView, &_docTabIconList);
@@ -345,8 +346,9 @@ LRESULT Notepad_plus::init(HWND hwnd)
 			::SendMessage(_mainDocTab.getHSelf(), WM_SETFONT, (WPARAM)hf, MAKELPARAM(TRUE, 0));
 			::SendMessage(_subDocTab.getHSelf(), WM_SETFONT, (WPARAM)hf, MAKELPARAM(TRUE, 0));
 		}
-		TabCtrl_SetItemSize(_mainDocTab.getHSelf(), 45, 20);
-		TabCtrl_SetItemSize(_subDocTab.getHSelf(), 45, 20);
+		int tabDpiDynamicalHeight = NppParameters::getInstance()->_dpiManager.scaleY(20);
+		TabCtrl_SetItemSize(_mainDocTab.getHSelf(), 45, tabDpiDynamicalHeight);
+		TabCtrl_SetItemSize(_subDocTab.getHSelf(), 45, tabDpiDynamicalHeight);
 	}
 	_mainDocTab.display();
 
@@ -3382,7 +3384,7 @@ void Notepad_plus::showAutoComp()
 {
 	bool isFromPrimary = _pEditView == &_mainEditView;
 	AutoCompletion * autoC = isFromPrimary?&_autoCompleteMain:&_autoCompleteSub;
-	autoC->showAutoComplete();
+	autoC->showApiComplete();
 }
 
 void Notepad_plus::showPathCompletion()
@@ -5267,7 +5269,7 @@ struct Quote{
 	const char *_quote;
 };
 
-const int nbQuote = 183;
+const int nbQuote = 193;
 Quote quotes[nbQuote] = {
 {"Notepad++", "Good programmers use Notepad++ to code.\nExtreme programmers use MS Word to code, in Comic Sans, center aligned."},
 {"Martin Golding", "Always code as if the guy who ends up maintaining your code will be a violent psychopath who knows where you live."},
@@ -5436,6 +5438,16 @@ Quote quotes[nbQuote] = {
 {"Anonymous #134", "Linux is user friendly.\nIt's just picky about its friends."},
 {"Anonymous #135", "Theory is when you know something, but it doesn't work.\nPractice is when something works, but you don't know why.\nProgrammers combine theory and practice: nothing works and they don't know why."},
 {"Anonymous #136", "Documentation is like sex:\nwhen it's good, it's very, very good;\nwhen it's bad, it's better than nothing."},
+{"Anonymous #137", "Home is where you poop most comfortably."},
+{"Anonymous #138", "Laptop Speakers problem: too quiet for music, too loud for porn."},
+{"Anonymous #139", "Chinese food to go: $16\nGas to go get the food: $2\nDrove home just to realize they forgot one of your containers: RICELESS"},
+{"Anonymous #140", "MS Windows is like religion to most people: they are born into it, accept it as default, never consider switching to another."},
+{"Anonymous #141", "To most religious people, the holy books are like a software license (EULA).\nNobody actually reads it. They just scroll to the bottom and click \"I agree\"."},
+{"Anonymous #142", "You are nothing but a number of days,\nwhenever each day passes then part of you has gone."},
+{"Anonymous #143", "If 666 is evil, does that make 25.8069758011 the root of all evil?"},
+{"Simon Amstell", "If you have some problem in your life and need to deal with it, then use religion, that's fine.\nI use Google."},
+{"James Bond", "James, James Bond."},
+{"Albert Einstein", "Only 3 things are infinite:\n1. Universe.\n2. Human Stupidity.\n3. Winrar's free trial."},
 {"Terry Pratchett", "Artificial Intelligence is no match for natural stupidity."},
 {"Stewart Brand", "Once a new technology starts rolling, if you're not part of the steamroller,\nyou're part of the road."},
 {"Sam Redwine", "Software and cathedrals are much the same - first we build them, then we pray."},

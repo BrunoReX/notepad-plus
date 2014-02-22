@@ -61,9 +61,14 @@
 #include "shortcut.h"
 #endif //SHORTCUTS_H
 
-#ifndef CONTEXTMENU
+#ifndef CONTEXTMENU_H
 #include "ContextMenu.h"
-#endif //CONTEXTMENU
+#endif //CONTEXTMENU_H
+
+#ifndef DPIMANAGER_H
+#include "dpiManager.h"
+#endif //DPIMANAGER_H
+
 
 #include <tchar.h>
 
@@ -701,9 +706,10 @@ struct NppGUI
 			   _checkHistoryFiles(true) ,_enableSmartHilite(true), _disableSmartHiliteTmp(false), _enableTagsMatchHilite(true), _enableTagAttrsHilite(true), _enableHiliteNonHTMLZone(false),\
 			   _isMaximized(false), _isMinimizedToTray(false), _rememberLastSession(true), _backup(bak_none), _useDir(false), _backupDir(TEXT("")),\
 			   _doTaskList(true), _maitainIndent(true), _openSaveDir(dir_followCurrent), _styleMRU(true), _styleURL(0),\
-			   _autocStatus(autoc_none), _autocFromLen(1), _funcParams(false), _definedSessionExt(TEXT("")),\
-			   _doesExistUpdater(false), _caretBlinkRate(250), _caretWidth(1), _enableMultiSelection(false), _shortTitlebar(false), _themeName(TEXT("")), _isLangMenuCompact(false),
-			   _smartHiliteCaseSensitive(false), _leftmostDelimiter('('), _rightmostDelimiter(')'), _delimiterSelectionOnEntireDocument(false), _multiInstSetting(monoInst) {
+			   _autocStatus(autoc_both), _autocFromLen(1), _funcParams(false), _definedSessionExt(TEXT("")),\
+			   _doesExistUpdater(false), _caretBlinkRate(250), _caretWidth(1), _enableMultiSelection(false), _shortTitlebar(false), _themeName(TEXT("")), _isLangMenuCompact(false),\
+			   _smartHiliteCaseSensitive(false), _leftmostDelimiter('('), _rightmostDelimiter(')'), _delimiterSelectionOnEntireDocument(false), _multiInstSetting(monoInst),\
+			   _fileSwitcherWithoutExtColumn(false) {
 		_appPos.left = 0;
 		_appPos.top = 0;
 		_appPos.right = 700;
@@ -772,7 +778,7 @@ struct NppGUI
 	generic_string _backupDir;
 	DockingManagerData _dockingData;
 	GlobalOverride _globalOverride;
-	enum AutocStatus{autoc_none, autoc_func, autoc_word};
+	enum AutocStatus{autoc_none, autoc_func, autoc_word, autoc_both};
 	AutocStatus _autocStatus;
 	size_t  _autocFromLen;
 	bool _funcParams;
@@ -801,6 +807,7 @@ struct NppGUI
 	TCHAR _defaultDirExp[MAX_PATH];	//expanded environment variables
 	generic_string _themeName;
 	MultiInstSetting _multiInstSetting;
+	bool _fileSwitcherWithoutExtColumn;
 };
 
 struct ScintillaViewParams
@@ -1518,6 +1525,8 @@ public:
 	generic_string getUserPath() const {
 		return _userPath;
 	};
+
+	DPIManager _dpiManager;
 
 private:
     NppParameters();
