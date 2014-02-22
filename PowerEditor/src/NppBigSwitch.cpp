@@ -34,6 +34,8 @@
 #include "VerticalFileSwitcher.h"
 #include "documentMap.h"
 
+#define WM_DPICHANGED 0x02E0
+
 struct SortTaskListPred
 {
 	DocTabView *_views[2];
@@ -1241,15 +1243,7 @@ LRESULT Notepad_plus::process(HWND hwnd, UINT Message, WPARAM wParam, LPARAM lPa
 					::GetCursorPos(&p);
 					ContextMenu scintillaContextmenu;
 					vector<MenuItemUnit> & tmp = pNppParam->getContextMenuItems();
-					vector<bool> isEnable;
-					for (size_t i = 0, len = tmp.size(); i < len ; ++i)
-					{
-						isEnable.push_back((::GetMenuState(_mainMenuHandle, tmp[i]._cmdID, MF_BYCOMMAND)&MF_DISABLED) == 0);
-					}
-					scintillaContextmenu.create(_pPublicInterface->getHSelf(), tmp);
-					for (size_t i = 0, len = isEnable.size(); i < len ; ++i)
-						scintillaContextmenu.enableItem(tmp[i]._cmdID, isEnable[i]);
-
+					scintillaContextmenu.create(_pPublicInterface->getHSelf(), tmp, _mainMenuHandle);
 					scintillaContextmenu.display(p);
 					return TRUE;
 				}
@@ -1854,6 +1848,20 @@ LRESULT Notepad_plus::process(HWND hwnd, UINT Message, WPARAM wParam, LPARAM lPa
 			return langDesc.length();
 		}
 
+		case NPPM_DOCSWITCHERDISABLECOLUMN:
+		{
+			BOOL isOff = lParam;
+			NppGUI & nppGUI = (NppGUI &)pNppParam->getNppGUI();
+			nppGUI._fileSwitcherWithoutExtColumn = isOff == TRUE;
+
+			if (_pFileSwitcherPanel)
+			{
+				_pFileSwitcherPanel->reload();
+			}
+			// else nothing to do
+			return TRUE;
+		}
+
 		case NPPM_SHOWDOCSWITCHER:
 		{
 			BOOL toShow = lParam;
@@ -1950,6 +1958,13 @@ LRESULT Notepad_plus::process(HWND hwnd, UINT Message, WPARAM wParam, LPARAM lPa
 				::SetMenu(_pPublicInterface->getHSelf(), NULL);
 			_sysMenuEntering = false;
 			return FALSE;
+		}
+
+		case WM_DPICHANGED:
+		{
+			//printInt(LOWORD(wParam));
+			//printInt(HIWORD(wParam));
+			return TRUE;
 		}
 
 		default:
