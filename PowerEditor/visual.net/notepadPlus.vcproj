@@ -52,7 +52,7 @@
 				PrecompiledHeaderThrough="precompiledHeaders.h"
 				PrecompiledHeaderFile="$(IntDir)\$(TargetName).pch"
 				WarningLevel="4"
-				WarnAsError="true"
+				WarnAsError="false"
 				Detect64BitPortabilityProblems="false"
 				DebugInformationFormat="3"
 			/>
@@ -148,7 +148,7 @@
 				UsePrecompiledHeader="1"
 				PrecompiledHeaderThrough="precompiledHeaders.h"
 				WarningLevel="4"
-				WarnAsError="true"
+				WarnAsError="false"
 				Detect64BitPortabilityProblems="false"
 				DebugInformationFormat="3"
 			/>
