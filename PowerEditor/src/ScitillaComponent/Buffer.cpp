@@ -33,6 +33,7 @@
 #include "Notepad_plus.h"
 #include "ScintillaEditView.h"
 #include "EncodingMapper.h"
+#include "uchardet.h"
 
 FileManager * FileManager::_pSelf = new FileManager();
 
@@ -604,10 +605,7 @@ bool FileManager::moveFile(BufferID id, const TCHAR * newFileName)
 {
 	Buffer * buf = getBufferByID(id);
 	const TCHAR *fileNamePath = buf->getFullPathName();
-	if (!PathFileExists(fileNamePath))
-		return false;
-
-	if (::MoveFile(fileNamePath, newFileName) == 0)
+	if (::MoveFileEx(fileNamePath, newFileName, MOVEFILE_REPLACE_EXISTING) == 0)
 		return false;
 
 	buf->setFileName(newFileName);
@@ -754,6 +752,18 @@ BufferID FileManager::bufferFromDocument(Document doc, bool dontIncrease, bool d
 	return id;
 }
 
+int FileManager::detectCodepage(char* buf, size_t len)
+{
+	int codepage = -1;
+	uchardet_t ud = uchardet_new();
+	uchardet_handle_data(ud, buf, len);
+	uchardet_data_end(ud);
+	const char* cs = uchardet_get_charset(ud);
+	codepage = EncodingMapper::getInstance()->getEncodingFromString(cs);
+	uchardet_delete(ud);
+	return codepage;
+}
+
 bool FileManager::loadFileData(Document doc, const TCHAR * filename, Utf8_16_Read * UnicodeConvertor, LangType language, int & encoding, formatType *pFormat)
 {
 	const int blockSize = 128 * 1024;	//128 kB
@@ -840,6 +850,10 @@ bool FileManager::loadFileData(Document doc, const TCHAR * filename, Utf8_16_Rea
                     // if file contains any BOM, then encoding will be erased,
                     // and the document will be interpreted as UTF 
                     encoding = -1;
+				}
+				else if (encoding == -1)
+				{
+                    encoding = detectCodepage(data, lenFile);
                 }
                 isFirstTime = false;
             }
