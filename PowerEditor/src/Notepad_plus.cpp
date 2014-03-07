@@ -934,7 +934,7 @@ int Notepad_plus::getHtmlXmlEncoding(const TCHAR *fileName) const
 		_invisibleEditView.execute(SCI_SETTARGETEND, endPos);
 
 		int posFound = _invisibleEditView.execute(SCI_SEARCHINTARGET, strlen(xmlHeaderRegExpr), (LPARAM)xmlHeaderRegExpr);
-		if (posFound != -1)
+		if (posFound != -1 && posFound != -2)
 		{
             const char *encodingBlockRegExpr = "encoding[ \\t]*=[ \\t]*\"[^\".]+\"";
             posFound = _invisibleEditView.execute(SCI_SEARCHINTARGET, strlen(encodingBlockRegExpr), (LPARAM)encodingBlockRegExpr);
@@ -973,10 +973,10 @@ int Notepad_plus::getHtmlXmlEncoding(const TCHAR *fileName) const
 
 		int posFound = _invisibleEditView.execute(SCI_SEARCHINTARGET, strlen(htmlHeaderRegExpr), (LPARAM)htmlHeaderRegExpr);
 
-		if (posFound == -1)
+		if (posFound == -1 || posFound == -2)
 		{
 			posFound = _invisibleEditView.execute(SCI_SEARCHINTARGET, strlen(htmlHeaderRegExpr2), (LPARAM)htmlHeaderRegExpr2);
-			if (posFound == -1)
+			if (posFound == -1 || posFound == -2)
 				return -1;
 		}
 		posFound = _invisibleEditView.execute(SCI_SEARCHINTARGET, strlen(charsetBlock), (LPARAM)charsetBlock);
@@ -2176,7 +2176,7 @@ void Notepad_plus::addHotSpot()
 
 	int posFound = _pEditView->execute(SCI_SEARCHINTARGET, strlen(URL_REG_EXPR), (LPARAM)URL_REG_EXPR);
 
-	while (posFound != -1)
+	while (posFound != -1 && posFound != -2)
 	{
 		int start = int(_pEditView->execute(SCI_GETTARGETSTART));
 		int end = int(_pEditView->execute(SCI_GETTARGETEND));
@@ -4677,14 +4677,14 @@ void Notepad_plus::loadCommandlineParams(const TCHAR * commandLine, CmdLineParam
  	LangType lt = pCmdParams->_langType;
 	int ln =  pCmdParams->_line2go;
     int cn = pCmdParams->_column2go;
-
+	bool recursive = pCmdParams->_isRecursive;
 	bool readOnly = pCmdParams->_isReadOnly;
 
 	BufferID lastOpened = BUFFER_INVALID;
 	for (int i = 0, len = fnss.size(); i < len ; ++i)
 	{
 		pFn = fnss.getFileName(i);
-		BufferID bufID = doOpen(pFn, readOnly);
+		BufferID bufID = doOpen(pFn, recursive, readOnly);
 		if (bufID == BUFFER_INVALID)	//cannot open file
 			continue;
 
@@ -5269,7 +5269,7 @@ struct Quote{
 	const char *_quote;
 };
 
-const int nbQuote = 193;
+const int nbQuote = 194;
 Quote quotes[nbQuote] = {
 {"Notepad++", "Good programmers use Notepad++ to code.\nExtreme programmers use MS Word to code, in Comic Sans, center aligned."},
 {"Martin Golding", "Always code as if the guy who ends up maintaining your code will be a violent psychopath who knows where you live."},
@@ -5400,7 +5400,7 @@ Quote quotes[nbQuote] = {
 {"Anonymous #96", "Code for 6 minutes, debug for 6 hours."},
 {"Anonymous #97", "Real Programmers don't comment their code.\nIf it was hard to write, it should be hard to read."},
 {"Anonymous #98", "My neighbours listen to good music.\nWhether they like it or not."},
-{"Anonymous #99", "Mondays are not so bad.\nIt's your job that sucks."},
+{"Anonymous #99", "I've been using Vim for about 2 years now,\nmostly because I can't figure out how to exit it."},
 {"Anonymous #100", "Dear YouTube,\nI can deal with Ads.\nI can deal with Buffer.\nBut when Ads buffer, I suffer."},
 {"Anonymous #101", "It's always sad when a man and his dick share only one brain...\nand it turns out to be the dick's."},
 {"Anonymous #102", "If IE is brave enough to ask you to set it as your default browser,\ndon't tell me you dare not ask a girl out."},
@@ -5425,7 +5425,7 @@ Quote quotes[nbQuote] = {
 {"Anonymous #121", "Thing to do today:\n1. Get up\n2. Go back to bed"},
 {"Anonymous #122", "Nerd?\nI prefer the term \"Intellectual badass\"."},
 {"Anonymous #123", "How can you face your problem if your problem is your face?"},
-{"Anonymous #124", "YOLOLO:\nYou Only LOL Once."},
+//{"Anonymous #124", ""},
 {"Anonymous #125", "Pooping with the door opened is the meaning of true freedom."},
 {"Anonymous #126", "Social media does not make people stupid.\nIt just makes stupid people more visible."},
 {"Anonymous #127", "Don't give up your dreams.\nKeep sleeping."},
@@ -5445,6 +5445,7 @@ Quote quotes[nbQuote] = {
 {"Anonymous #141", "To most religious people, the holy books are like a software license (EULA).\nNobody actually reads it. They just scroll to the bottom and click \"I agree\"."},
 {"Anonymous #142", "You are nothing but a number of days,\nwhenever each day passes then part of you has gone."},
 {"Anonymous #143", "If 666 is evil, does that make 25.8069758011 the root of all evil?"},
+{"Floor", "If you fall, I will be there."},
 {"Simon Amstell", "If you have some problem in your life and need to deal with it, then use religion, that's fine.\nI use Google."},
 {"James Bond", "James, James Bond."},
 {"Albert Einstein", "Only 3 things are infinite:\n1. Universe.\n2. Human Stupidity.\n3. Winrar's free trial."},
@@ -5463,6 +5464,7 @@ Quote quotes[nbQuote] = {
 {"Confucius", "It's good to meet girl in park.\nBut better to park meat in girl."},
 {"Mark Twain", "Censorship is telling a man he can't have a steak just because a baby can't chew it."},
 {"Friedrich Nietzsche", "There is not enough love and goodness in the world to permit giving any of it away to imaginary beings."},
+{"Elie Wiesel", "Human beings can be beautiful or more beautiful,\nthey can be fat or skinny, they can be right or wrong,\nbut illegal? How can a human being be illegal?"},
 {"Chewbacca", "Uuuuuuuuuur Ahhhhrrrrrr\nUhrrrr Ahhhhrrrrrr\nAaaarhg..."}
 };
 
