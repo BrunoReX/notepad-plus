@@ -618,7 +618,7 @@ public:
 		previousSelRange = currentSelRange;
 		return false;
 	};
-	void setHiLiteResultWords(const TCHAR *keywords);
+
 	void defineDocType(LangType typeDoc);	//setup stylers for active document
 	void mouseWheel(WPARAM wParam, LPARAM lParam) {
 		scintillaNew_Proc(_hSelf, WM_MOUSEWHEEL, wParam, lParam);
@@ -715,7 +715,8 @@ protected:
 
 
 	void setSqlLexer() {
-		execute(SCI_SETPROPERTY, (WPARAM)"sql.backslash.escapes", (LPARAM)"1");
+		const bool kbBackSlash = NppParameters::getInstance()->getNppGUI()._backSlashIsEscapeCharacterForSql;
+		execute(SCI_SETPROPERTY, (WPARAM)"sql.backslash.escapes", kbBackSlash ? (LPARAM)"1" : (LPARAM)"0");
 		setLexer(SCLEX_SQL, L_SQL, LIST_0);
 	};
 

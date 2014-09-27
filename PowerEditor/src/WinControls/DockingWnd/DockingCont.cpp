@@ -293,15 +293,14 @@ LRESULT DockingCont::runProcCaption(HWND hwnd, UINT Message, WPARAM wParam, LPAR
 
 				// start hooking
 				hWndServer		= _hCaption;
-				winVer ver = (NppParameters::getInstance())->getWinVersion();
-				hookMouse	= ::SetWindowsHookEx(ver >= WV_W2K?WH_MOUSE_LL:WH_MOUSE, (HOOKPROC)hookProcMouse, _hInst, 0);
+				hookMouse = ::SetWindowsHookEx(WH_MOUSE_LL, (HOOKPROC)hookProcMouse, _hInst, 0);
 
 				if (!hookMouse)
 				{
 					DWORD dwError = ::GetLastError();
 					TCHAR  str[128];
 					::wsprintf(str, TEXT("GetLastError() returned %lu"), dwError);
-					::MessageBox(NULL, str, TEXT("SetWindowsHookEx(MOUSE) failed"), MB_OK | MB_ICONERROR);
+					::MessageBox(NULL, str, TEXT("SetWindowsHookEx(MOUSE) failed on runProcCaption"), MB_OK | MB_ICONERROR);
 				}
 				::RedrawWindow(hwnd, NULL, NULL, TRUE);
 			}

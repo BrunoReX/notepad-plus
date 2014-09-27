@@ -33,6 +33,7 @@
 #include "keys.h"
 #include "localization.h"
 #include "UserDefineDialog.h"
+#include "../src/sqlite/sqlite3.h"
 
 struct WinMenuKeyDefinition {	//more or less matches accelerator table definition, easy copy/paste
 	//const TCHAR * name;	//name retrieved from menu?
@@ -567,11 +568,17 @@ winVer getWindowsVersion()
 		pGNSI(&si);
 	else
 		GetSystemInfo(&si);
-
+	//printInt(osvi.dwMajorVersion);
+	//printInt(osvi.dwMinorVersion);
    switch (osvi.dwPlatformId)
    {
 		case VER_PLATFORM_WIN32_NT:
 		{
+			if ( osvi.dwMajorVersion == 6 && osvi.dwMinorVersion == 3 )
+			{
+				return WV_WIN81;
+			}
+
 			if ( osvi.dwMajorVersion == 6 && osvi.dwMinorVersion == 2 )
 			{
 				return WV_WIN8;
@@ -648,7 +655,7 @@ NppParameters::NppParameters() :	_pXmlDoc(NULL),_pXmlUserDoc(NULL), _pXmlUserSty
 									_pXmlSessionDoc(NULL), _pXmlBlacklistDoc(NULL),	_nbUserLang(0), _nbExternalLang(0),\
 									_hUser32(NULL), _hUXTheme(NULL), _transparentFuncAddr(NULL), _enableThemeDialogTextureFuncAddr(NULL),\
 									_pNativeLangSpeaker(NULL), _isTaskListRBUTTONUP_Active(false), _fileSaveDlgFilterIndex(-1),\
-									_asNotepadStyle(false), _isFindReplacing(false)/*, _forceLoadingSession(false)*/
+									_asNotepadStyle(false), _isFindReplacing(false)
 {
 	// init import UDL array
 	_nbImportedULD = 0;
@@ -792,6 +799,329 @@ bool NppParameters::reloadLang()
 	return loadOkay;
 }
 
+size_t getAsciiLenFromBase64Len(size_t base64StrLen)
+{
+	if (base64StrLen % 4) return 0;
+	return  base64StrLen - base64StrLen / 4;
+}
+
+int base64ToAscii(char *dest, const char *base64Str)
+{
+	int base64IndexArray[123] =\
+	{\
+	-1, -1, -1, -1, -1, -1, -1, -1,\
+	-1, -1, -1, -1, -1, -1, -1, -1,\
+	-1, -1, -1, -1, -1, -1, -1, -1,\
+	-1, -1, -1, -1, -1, -1, -1, -1,\
+	-1, -1, -1, -1, -1, -1, -1, -1,\
+	-1, -1, -1, 62, -1, -1, -1, 63,\
+	52, 53, 54, 55 ,56, 57, 58, 59,\
+	60, 61, -1, -1, -1, -1, -1, -1,\
+	-1,  0,  1,  2,  3,  4,  5,  6,\
+	 7,  8,  9, 10, 11, 12, 13, 14,\
+	15, 16, 17, 18, 19, 20, 21, 22,\
+	23, 24, 25, -1, -1, -1, -1 ,-1,\
+	-1, 26, 27, 28, 29, 30, 31, 32,\
+	33, 34, 35, 36, 37, 38, 39, 40,\
+	41, 42, 43, 44, 45, 46, 47, 48,\
+	49, 50, 51\
+	};
+
+	size_t b64StrLen = strlen(base64Str);	
+	size_t nbLoop = b64StrLen / 4;
+
+	size_t i = 0;
+	int k = 0;
+
+	enum {b64_just, b64_1padded, b64_2padded} padd = b64_just;
+	for ( ; i < nbLoop ; i++)
+	{
+		size_t j = i * 4;
+		UCHAR uc0, uc1, uc2, uc3, p0, p1;
+
+		uc0 = (UCHAR)base64IndexArray[base64Str[j]];
+		uc1 = (UCHAR)base64IndexArray[base64Str[j+1]];
+		uc2 = (UCHAR)base64IndexArray[base64Str[j+2]];
+		uc3 = (UCHAR)base64IndexArray[base64Str[j+3]];
+
+		if ((uc0 == -1) || (uc1 == -1) || (uc2 == -1) || (uc3 == -1))
+			return -1;
+
+		if (base64Str[j+2] == '=') // && (uc3 == '=')
+		{
+			uc2 = uc3 = 0;
+			padd = b64_2padded;
+		}
+		else if (base64Str[j+3] == '=')
+		{
+			uc3 = 0;
+			padd = b64_1padded;
+		}
+		p0 = uc0 << 2;
+		p1 = uc1 << 2;
+		p1 >>= 6;
+		dest[k++] = p0 | p1;
+
+		p0 = uc1 << 4;
+		p1 = uc2 << 2;
+		p1 >>= 4;
+		dest[k++] = p0 | p1;
+
+		p0 = uc2 << 6;
+		p1 = uc3;
+		dest[k++] = p0 | p1;
+	}
+
+	//dest[k] = '\0';
+	if (padd == b64_1padded)
+	//	dest[k-1] = '\0';
+		return k-1;
+	else if (padd == b64_2padded)
+	//	dest[k-2] = '\0';
+		return k-2;
+
+	return k;
+}
+
+
+/*
+Spec for settings on cloud (dropbox, oneDrive and googleDrive)
+    ON LOAD:
+    1. if doLocalConf.xml, check nppInstalled/cloud/choice
+    2. check the validity of 3 cloud and get the npp_cloud_folder according the choice.
+    3. Set npp_cloud_folder as user_dir.
+    
+    Attention: settings files in cloud_folder should never be removed or erased.
+    
+    ON SET:
+    1. write "dropbox", "oneDrive" or "googleDrive" in nppInstalled/cloud/choice file, if choice file doesn't exist, create it.
+    2. ask user to restart Notepad++
+    3. if no settings files in npp_cloud_folder , write settings before exiting.
+
+    ON UNSET:
+    1. remove nppInstalled/cloud/choice file
+    2. ask user to restart Notepad++
+   
+   Here are the list of xml settings used by Notepad++:
+   1. config.xml: saveed on exit
+   2. stylers.xml: saved on modified
+   3. langs.xml: no save
+   4. session.xml: saveed on exit or : all the time, if session snapshot is enabled.
+   5. shortcuts.xml: saveed on exit
+   6. userDefineLang.xml: saveed on exit
+   7. functionlist.xml: no save
+   8. contextMenu.xml: no save
+   9. nativeLang.xml: no save
+*/
+
+generic_string NppParameters::getCloudSettingsPath(CloudChoice cloudChoice)
+{
+	generic_string cloudSettingsPath = TEXT("");
+	
+	//
+	// check if dropbox is present
+	//
+	generic_string settingsPath4dropbox = TEXT("");
+
+	ITEMIDLIST *pidl;
+	SHGetSpecialFolderLocation(NULL, CSIDL_APPDATA, &pidl);
+	TCHAR tmp[MAX_PATH];
+	SHGetPathFromIDList(pidl, tmp);
+	generic_string dropboxInfoDB = tmp;
+
+	PathAppend(dropboxInfoDB, TEXT("Dropbox\\host.db"));
+	try {
+		if (::PathFileExists(dropboxInfoDB.c_str()))
+		{
+			// get whole content
+			std::string content = getFileContent(dropboxInfoDB.c_str());
+			if (content != "")
+			{
+				// get the second line
+				const char *pB64 = content.c_str();
+				for (size_t i = 0; i < content.length(); ++i)
+				{
+					++pB64;
+					if (*pB64 == '\n')
+					{
+						++pB64;
+						break;
+					}
+				}
+
+				// decode base64
+				size_t b64Len = strlen(pB64);
+				size_t asciiLen = getAsciiLenFromBase64Len(b64Len);
+				char * pAsciiText = new char[asciiLen + 1];
+				int len = base64ToAscii(pAsciiText, pB64);
+				if (len)
+				{
+					//::MessageBoxA(NULL, pAsciiText, "", MB_OK);
+					const size_t maxLen = 2048;
+					wchar_t dest[maxLen];
+					mbstowcs(dest, pAsciiText, maxLen);
+					if (::PathFileExists(dest))
+					{
+						settingsPath4dropbox = dest;
+						_nppGUI._availableClouds |= DROPBOX_AVAILABLE;
+					}
+				}
+				delete [] pAsciiText;
+			}
+		}
+	} catch (...) {
+		//printStr(TEXT("JsonCpp exception captured"));
+	}
+
+	//
+	// TODO: check if OneDrive is present
+	//
+
+	// Get value from registry
+	generic_string settingsPath4OneDrive = TEXT("");
+	HKEY hKey;
+	LRESULT res = ::RegOpenKeyEx(HKEY_CURRENT_USER, TEXT("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\SkyDrive"), 0, KEY_READ, &hKey);
+	if (res != ERROR_SUCCESS)
+	{
+		res = ::RegOpenKeyEx(HKEY_CURRENT_USER, TEXT("SOFTWARE\\Microsoft\\SkyDrive"), 0, KEY_READ, &hKey);
+	}
+
+	if (res == ERROR_SUCCESS)
+	{
+		TCHAR valData[MAX_PATH];
+		int valDataLen = MAX_PATH * sizeof(TCHAR);
+		int valType;
+		::RegQueryValueEx(hKey, TEXT("UserFolder"), NULL, (LPDWORD)&valType, (LPBYTE)valData, (LPDWORD)&valDataLen);
+
+		if (::PathFileExists(valData))
+		{
+			settingsPath4OneDrive = valData;
+			_nppGUI._availableClouds |= ONEDRIVE_AVAILABLE;
+		}
+		::RegCloseKey(hKey);
+	}
+
+	//
+	// TODO: check if google drive is present
+	//
+	ITEMIDLIST *pidl2;
+	SHGetSpecialFolderLocation(NULL, CSIDL_LOCAL_APPDATA, &pidl2);
+	TCHAR tmp2[MAX_PATH];
+	SHGetPathFromIDList(pidl2, tmp2);
+	generic_string googleDriveInfoDB = tmp2;
+
+	PathAppend(googleDriveInfoDB, TEXT("Google\\Drive\\sync_config.db"));
+
+	generic_string settingsPath4GoogleDrive = TEXT("");
+
+	if (::PathFileExists(googleDriveInfoDB.c_str()))
+	{
+		try {
+			sqlite3 *handle;
+			sqlite3_stmt *stmt;
+
+			// try to create the database. If it doesnt exist, it would be created
+			// pass a pointer to the pointer to sqlite3, in short sqlite3**
+			char dest[MAX_PATH];
+			wcstombs(dest, googleDriveInfoDB.c_str(), sizeof(dest));
+			int retval = sqlite3_open(dest, &handle);
+
+			// If connection failed, handle returns NULL
+			if (retval ==  SQLITE_OK)
+			{
+				char query[] = "select * from data where entry_key='local_sync_root_path'";
+
+				retval = sqlite3_prepare_v2(handle, query, -1, &stmt, 0); //sqlite3_prepare_v2() interfaces use UTF-8
+				if (retval == SQLITE_OK)
+				{
+					// fetch a row’s status
+					retval = sqlite3_step(stmt);
+
+					if (retval == SQLITE_ROW) 
+					{
+						const unsigned char *text;
+						text = sqlite3_column_text(stmt, 2);
+
+						const size_t maxLen = 2048;
+						wchar_t googleFolder[maxLen];
+						mbstowcs(googleFolder, (char *)(text + 4), maxLen);
+						if (::PathFileExists(googleFolder))
+						{
+							settingsPath4GoogleDrive = googleFolder;
+							_nppGUI._availableClouds |= GOOGLEDRIVE_AVAILABLE;
+						}
+					}
+				}
+				sqlite3_close(handle);
+			}
+			
+		} catch(...) {
+			// Do nothing
+		}
+	}
+
+	if (cloudChoice == dropbox && (_nppGUI._availableClouds & DROPBOX_AVAILABLE))
+	{
+		cloudSettingsPath = settingsPath4dropbox;
+		PathAppend(cloudSettingsPath, TEXT("Notepad++"));
+
+		// The folder cloud_folder\Notepad++ should exist.
+		// if it doesn't, it means this folder was removed by user, we create it anyway
+		if (!PathFileExists(cloudSettingsPath.c_str()))
+		{
+			::CreateDirectory(cloudSettingsPath.c_str(), NULL);
+		}
+		_nppGUI._cloudChoice = dropbox;
+	}
+	else if (cloudChoice == oneDrive)
+	{
+		_nppGUI._cloudChoice = oneDrive;
+		cloudSettingsPath = settingsPath4OneDrive;
+		PathAppend(cloudSettingsPath, TEXT("Notepad++"));
+
+		if (!PathFileExists(cloudSettingsPath.c_str()))
+		{
+			::CreateDirectory(cloudSettingsPath.c_str(), NULL);
+		}
+		_nppGUI._cloudChoice = oneDrive;
+	}
+	else if (cloudChoice == googleDrive)
+	{
+		_nppGUI._cloudChoice = googleDrive;
+		cloudSettingsPath = settingsPath4GoogleDrive;
+		PathAppend(cloudSettingsPath, TEXT("Notepad++"));
+		
+		if (!PathFileExists(cloudSettingsPath.c_str()))
+		{
+			::CreateDirectory(cloudSettingsPath.c_str(), NULL);
+		}
+		_nppGUI._cloudChoice = googleDrive;
+	}
+	//else if (cloudChoice == noCloud)
+	//	cloudSettingsPath is always empty
+
+	return cloudSettingsPath;
+}
+
+generic_string NppParameters::getSettingsFolder()
+{
+	generic_string settingsFolderPath;
+	if (_isLocal)
+	{
+		return _nppPath;
+	}
+	else
+	{
+		ITEMIDLIST *pidl;
+		SHGetSpecialFolderLocation(NULL, CSIDL_APPDATA, &pidl);
+		TCHAR tmp[MAX_PATH];
+		SHGetPathFromIDList(pidl, tmp);
+		generic_string settingsFolderPath = tmp;
+		PathAppend(settingsFolderPath, TEXT("Notepad++"));
+		return settingsFolderPath;
+	}
+}
+
 bool NppParameters::load()
 {
 	L_END = L_EXTERNAL;
@@ -805,25 +1135,25 @@ bool NppParameters::load()
 	// Test if localConf.xml exist
 	_isLocal = (PathFileExists(localConfPath.c_str()) == TRUE);
 
-    // Under vista and windows 7, the usage of doLocalConf.xml is not allowed
-    // if Notepad++ is installed in "program files" directory, because of UAC
-    if (_isLocal)
-    {
-        // We check if OS is Vista or above
-        if (_winVersion >= WV_VISTA)
-        {
-            ITEMIDLIST *pidl;
-		    SHGetSpecialFolderLocation(NULL, CSIDL_PROGRAM_FILES, &pidl);
-		    TCHAR progPath[MAX_PATH];
-		    SHGetPathFromIDList(pidl, progPath);
-            TCHAR nppDirLocation[MAX_PATH];
-            lstrcpy(nppDirLocation, _nppPath.c_str());
-            ::PathRemoveFileSpec(nppDirLocation);
+	// Under vista and windows 7, the usage of doLocalConf.xml is not allowed
+	// if Notepad++ is installed in "program files" directory, because of UAC
+	if (_isLocal)
+	{
+		// We check if OS is Vista or greater version
+		if (_winVersion >= WV_VISTA)
+		{
+			ITEMIDLIST *pidl;
+			SHGetSpecialFolderLocation(NULL, CSIDL_PROGRAM_FILES, &pidl);
+			TCHAR progPath[MAX_PATH];
+			SHGetPathFromIDList(pidl, progPath);
+			TCHAR nppDirLocation[MAX_PATH];
+			lstrcpy(nppDirLocation, _nppPath.c_str());
+			::PathRemoveFileSpec(nppDirLocation);
             	
-            if  (lstrcmp(progPath, nppDirLocation) == 0)
-                _isLocal = false;
-        }
-    }
+			if  (lstrcmp(progPath, nppDirLocation) == 0)
+				_isLocal = false;
+		}
+	}
 
 	if (_isLocal)
 	{
@@ -845,6 +1175,41 @@ bool NppParameters::load()
 			::CreateDirectory(_userPath.c_str(), NULL);
 		}
 	}
+
+	_sessionPath = _userPath; // Session stock the absolute file path, it should never be on cloud
+
+	// Detection cloud settings
+	//bool isCloud = false;
+	generic_string cloudChoicePath = _userPath;
+	cloudChoicePath += TEXT("\\cloud\\choice");
+	
+	CloudChoice cloudChoice = noCloud;
+	// cloudChoicePath doesn't exist, just quit
+	if (::PathFileExists(cloudChoicePath.c_str()))
+	{
+		// Read cloud choice
+		std::string cloudChoiceStr = getFileContent(cloudChoicePath.c_str());
+		if (cloudChoiceStr == "dropbox")
+		{
+			cloudChoice = dropbox;
+		}
+		else if (cloudChoiceStr == "oneDrive")
+		{
+			cloudChoice = oneDrive;
+		}
+		else if (cloudChoiceStr == "googleDrive")
+		{
+			cloudChoice = googleDrive;
+		}
+	}
+
+	generic_string cloudPath = getCloudSettingsPath(cloudChoice);
+	if (cloudPath != TEXT("") && ::PathFileExists(cloudPath.c_str()))
+	{
+		_userPath = cloudPath;
+	}
+	//}
+
 
 	//-------------------------------------//
 	// Transparent function for w2k and xp //
@@ -1109,7 +1474,7 @@ bool NppParameters::load()
 	//----------------------------//
 	// session.xml : for per user //
 	//----------------------------//
-	_sessionPath = _userPath;
+	
 	PathAppend(_sessionPath, TEXT("session.xml"));
 
 	// Don't load session.xml if not required in order to speed up!!
@@ -1628,7 +1993,6 @@ bool NppParameters::getSessionFromXmlTree(TiXmlDocument *pSessionDoc, Session *p
 	if (!sessionRoot)
 		return false;
 
-	
 	TiXmlElement *actView = sessionRoot->ToElement();
 	size_t index;
 	const TCHAR *str = actView->Attribute(TEXT("activeView"), (int *)&index);
@@ -1637,125 +2001,80 @@ bool NppParameters::getSessionFromXmlTree(TiXmlDocument *pSessionDoc, Session *p
 		(*ptrSession)._activeView = index;
 	}
 
-
-	TiXmlNode *mainviewRoot = sessionRoot->FirstChildElement(TEXT("mainView"));
-	if (mainviewRoot)
+	const size_t nbView = 2;
+	TiXmlNode *viewRoots[nbView];
+	viewRoots[0] = sessionRoot->FirstChildElement(TEXT("mainView"));
+	viewRoots[1] = sessionRoot->FirstChildElement(TEXT("subView"));
+	for (size_t k = 0; k < nbView; ++k)
 	{
-		TiXmlElement *actIndex = mainviewRoot->ToElement();
-		str = actIndex->Attribute(TEXT("activeIndex"), (int *)&index);
-		if (str)
+		if (viewRoots[k])
 		{
-			(*ptrSession)._activeMainIndex = index;
-		}
-		for (TiXmlNode *childNode = mainviewRoot->FirstChildElement(TEXT("File"));
-			childNode ;
-			childNode = childNode->NextSibling(TEXT("File")) )
-		{
-			const TCHAR *fileName = (childNode->ToElement())->Attribute(TEXT("filename"));
-			if (fileName)
+			TiXmlElement *actIndex = viewRoots[k]->ToElement();
+			str = actIndex->Attribute(TEXT("activeIndex"), (int *)&index);
+			if (str)
 			{
-				Position position;
-				(childNode->ToElement())->Attribute(TEXT("firstVisibleLine"), &position._firstVisibleLine);
-				(childNode->ToElement())->Attribute(TEXT("xOffset"), &position._xOffset);
-				(childNode->ToElement())->Attribute(TEXT("startPos"), &position._startPos);
-				(childNode->ToElement())->Attribute(TEXT("endPos"), &position._endPos);
-				(childNode->ToElement())->Attribute(TEXT("selMode"), &position._selMode);
-				(childNode->ToElement())->Attribute(TEXT("scrollWidth"), &position._scrollWidth);
-
-				const TCHAR *langName;
-				langName = (childNode->ToElement())->Attribute(TEXT("lang"));
-				int encoding = -1;
-				const TCHAR *encStr = (childNode->ToElement())->Attribute(TEXT("encoding"), &encoding);
-				sessionFileInfo sfi(fileName, langName, encStr?encoding:-1, position);
-
-				for (TiXmlNode *markNode = childNode->FirstChildElement(TEXT("Mark"));
-					markNode ;
-					markNode = markNode->NextSibling(TEXT("Mark")))
+				if (k == 0)
+					(*ptrSession)._activeMainIndex = index;
+				else // k == 1
+					(*ptrSession)._activeSubIndex = index;
+			}
+			for (TiXmlNode *childNode = viewRoots[k]->FirstChildElement(TEXT("File"));
+				childNode ;
+				childNode = childNode->NextSibling(TEXT("File")) )
+			{
+				const TCHAR *fileName = (childNode->ToElement())->Attribute(TEXT("filename"));
+				if (fileName)
 				{
-					int lineNumber;
-					const TCHAR *lineNumberStr = (markNode->ToElement())->Attribute(TEXT("line"), &lineNumber);
-					if (lineNumberStr)
-					{
-						sfi.marks.push_back(lineNumber);
-					}
-				}
+					Position position;
+					(childNode->ToElement())->Attribute(TEXT("firstVisibleLine"), &position._firstVisibleLine);
+					(childNode->ToElement())->Attribute(TEXT("xOffset"), &position._xOffset);
+					(childNode->ToElement())->Attribute(TEXT("startPos"), &position._startPos);
+					(childNode->ToElement())->Attribute(TEXT("endPos"), &position._endPos);
+					(childNode->ToElement())->Attribute(TEXT("selMode"), &position._selMode);
+					(childNode->ToElement())->Attribute(TEXT("scrollWidth"), &position._scrollWidth);
 
-				for (TiXmlNode *foldNode = childNode->FirstChildElement(TEXT("Fold"));
-					foldNode ;
-					foldNode = foldNode->NextSibling(TEXT("Fold")))
-				{
-					int lineNumber;
-					const TCHAR *lineNumberStr = (foldNode->ToElement())->Attribute(TEXT("line"), &lineNumber);
-					if (lineNumberStr)
+					const TCHAR *langName;
+					langName = (childNode->ToElement())->Attribute(TEXT("lang"));
+					int encoding = -1;
+					const TCHAR *encStr = (childNode->ToElement())->Attribute(TEXT("encoding"), &encoding);
+					const TCHAR *backupFilePath = (childNode->ToElement())->Attribute(TEXT("backupFilePath"));
+
+					int fileModifiedTimestamp = 0;
+					(childNode->ToElement())->Attribute(TEXT("originalFileLastModifTimestamp"), &fileModifiedTimestamp);
+
+					sessionFileInfo sfi(fileName, langName, encStr?encoding:-1, position, backupFilePath, fileModifiedTimestamp);
+
+					for (TiXmlNode *markNode = childNode->FirstChildElement(TEXT("Mark"));
+						markNode ;
+						markNode = markNode->NextSibling(TEXT("Mark")))
 					{
-						sfi._foldStates.push_back(lineNumber);
+						int lineNumber;
+						const TCHAR *lineNumberStr = (markNode->ToElement())->Attribute(TEXT("line"), &lineNumber);
+						if (lineNumberStr)
+						{
+							sfi._marks.push_back(lineNumber);
+						}
 					}
+
+					for (TiXmlNode *foldNode = childNode->FirstChildElement(TEXT("Fold"));
+						foldNode ;
+						foldNode = foldNode->NextSibling(TEXT("Fold")))
+					{
+						int lineNumber;
+						const TCHAR *lineNumberStr = (foldNode->ToElement())->Attribute(TEXT("line"), &lineNumber);
+						if (lineNumberStr)
+						{
+							sfi._foldStates.push_back(lineNumber);
+						}
+					}
+					if (k == 0)
+						(*ptrSession)._mainViewFiles.push_back(sfi);
+					else // k == 1
+						(*ptrSession)._subViewFiles.push_back(sfi);
 				}
-				(*ptrSession)._mainViewFiles.push_back(sfi);
 			}
 		}
 	}
-	
-	TiXmlNode *subviewRoot = sessionRoot->FirstChildElement(TEXT("subView"));
-	if (subviewRoot)
-	{
-		TiXmlElement *actIndex = subviewRoot->ToElement();
-		str = actIndex->Attribute(TEXT("activeIndex"), (int *)&index);
-		if (str)
-		{
-			(*ptrSession)._activeSubIndex = index;
-		}
-		for (TiXmlNode *childNode = subviewRoot->FirstChildElement(TEXT("File"));
-			childNode ;
-			childNode = childNode->NextSibling(TEXT("File")) )
-		{
-			const TCHAR *fileName = (childNode->ToElement())->Attribute(TEXT("filename"));
-			if (fileName)
-			{
-
-				Position position;
-				(childNode->ToElement())->Attribute(TEXT("firstVisibleLine"), &position._firstVisibleLine);
-				(childNode->ToElement())->Attribute(TEXT("xOffset"), &position._xOffset);
-				(childNode->ToElement())->Attribute(TEXT("startPos"), &position._startPos);
-				(childNode->ToElement())->Attribute(TEXT("endPos"), &position._endPos);
-				(childNode->ToElement())->Attribute(TEXT("selMode"), &position._selMode);
-				(childNode->ToElement())->Attribute(TEXT("scrollWidth"), &position._scrollWidth);
-
-				const TCHAR *langName;
-				langName = (childNode->ToElement())->Attribute(TEXT("lang"));
-				int encoding = -1;
-				(childNode->ToElement())->Attribute(TEXT("encoding"), &encoding);
-
-				sessionFileInfo sfi(fileName, langName, encoding, position);
-
-				for (TiXmlNode *markNode = childNode->FirstChildElement(TEXT("Mark"));
-					markNode ;
-					markNode = markNode->NextSibling(TEXT("Mark")))
-				{
-					int lineNumber;
-					const TCHAR *lineNumberStr = (markNode->ToElement())->Attribute(TEXT("line"), &lineNumber);
-					if (lineNumberStr)
-					{
-						sfi.marks.push_back(lineNumber);
-					}
-				}
-
-				for (TiXmlNode *foldNode = childNode->FirstChildElement(TEXT("Fold"));
-					foldNode ;
-					foldNode = foldNode->NextSibling(TEXT("Fold")))
-				{
-					int lineNumber;
-					const TCHAR *lineNumberStr = (foldNode->ToElement())->Attribute(TEXT("line"), &lineNumber);
-					if (lineNumberStr)
-					{
-						sfi._foldStates.push_back(lineNumber);
-					}
-				}
-				(*ptrSession)._subViewFiles.push_back(sfi);
-			}
-		}
-	}
-
 	
 	return true;
 }
@@ -2317,6 +2636,90 @@ LangType NppParameters::getLangFromExt(const TCHAR *ext)
 	return L_TEXT;
 }
 
+void NppParameters::writeSettingsFilesOnCloudForThe1stTime(CloudChoice choice)
+{
+	generic_string cloudSettingsPath = getCloudSettingsPath(choice);
+	if (cloudSettingsPath == TEXT(""))
+	{
+		return;
+	}
+	
+	// config.xml
+	generic_string cloudConfigPath = cloudSettingsPath;
+	PathAppend(cloudConfigPath, TEXT("config.xml"));
+	if (!::PathFileExists(cloudConfigPath.c_str()) && _pXmlUserDoc)
+	{
+		_pXmlUserDoc->SaveFile(cloudConfigPath.c_str());
+	}
+
+	// stylers.xml
+	generic_string cloudStylersPath = cloudSettingsPath;
+	PathAppend(cloudStylersPath, TEXT("stylers.xml"));
+	if (!::PathFileExists(cloudStylersPath.c_str()) && _pXmlUserStylerDoc)
+	{
+		_pXmlUserStylerDoc->SaveFile(cloudStylersPath.c_str());
+	}
+
+	// langs.xml
+	generic_string cloudLangsPath = cloudSettingsPath;
+	PathAppend(cloudLangsPath, TEXT("langs.xml"));
+	if (!::PathFileExists(cloudLangsPath.c_str()) && _pXmlUserDoc)
+	{
+		_pXmlDoc->SaveFile(cloudLangsPath.c_str());
+	}
+/*
+	// session.xml: Session stock the absolute file path, it should never be on cloud
+	generic_string cloudSessionPath = cloudSettingsPath;
+	PathAppend(cloudSessionPath, TEXT("session.xml"));
+	if (!::PathFileExists(cloudSessionPath.c_str()) && _pXmlSessionDoc)
+	{
+		_pXmlSessionDoc->SaveFile(cloudSessionPath.c_str());
+	}
+*/
+	// userDefineLang.xml
+	generic_string cloudUserLangsPath = cloudSettingsPath;
+	PathAppend(cloudUserLangsPath, TEXT("userDefineLang.xml"));
+	if (!::PathFileExists(cloudUserLangsPath.c_str()) && _pXmlUserLangDoc)
+	{
+		_pXmlUserLangDoc->SaveFile(cloudUserLangsPath.c_str());
+	}
+
+	// shortcuts.xml
+	generic_string cloudShortcutsPath = cloudSettingsPath;
+	PathAppend(cloudShortcutsPath, TEXT("shortcuts.xml"));
+	if (!::PathFileExists(cloudShortcutsPath.c_str()) && _pXmlShortcutDoc)
+	{
+		_pXmlShortcutDoc->SaveFile(cloudShortcutsPath.c_str());
+	}
+
+	// contextMenu.xml
+	generic_string cloudContextMenuPath = cloudSettingsPath;
+	PathAppend(cloudContextMenuPath, TEXT("contextMenu.xml"));
+	if (!::PathFileExists(cloudContextMenuPath.c_str()) && _pXmlContextMenuDocA)
+	{
+		_pXmlContextMenuDocA->SaveUnicodeFilePath(cloudContextMenuPath.c_str());
+	}
+
+	// nativeLang.xml
+	generic_string cloudNativeLangPath = cloudSettingsPath;
+	PathAppend(cloudNativeLangPath, TEXT("nativeLang.xml"));
+	if (!::PathFileExists(cloudNativeLangPath.c_str()) && _pXmlNativeLangDocA)
+	{
+		_pXmlNativeLangDocA->SaveUnicodeFilePath(cloudNativeLangPath.c_str());
+	}
+	
+	/*
+	// functionList.xml
+	generic_string cloudFunctionListPath = cloudSettingsPath;
+	PathAppend(cloudFunctionListPath, TEXT("functionList.xml"));
+	if (!::PathFileExists(cloudFunctionListPath.c_str()))
+	{
+
+	}
+	*/
+}
+
+
 void NppParameters::writeUserDefinedLang()
 {
 	if (!_pXmlUserLangDoc)
@@ -2443,65 +2846,54 @@ void NppParameters::writeSession(const Session & session, const TCHAR *fileName)
 		TiXmlNode *sessionNode = root->InsertEndChild(TiXmlElement(TEXT("Session")));
 		(sessionNode->ToElement())->SetAttribute(TEXT("activeView"), (int)session._activeView);
 
-		TiXmlNode *mainViewNode = sessionNode->InsertEndChild(TiXmlElement(TEXT("mainView")));
-		(mainViewNode->ToElement())->SetAttribute(TEXT("activeIndex"), (int)session._activeMainIndex);
-		for (size_t i = 0, len = session._mainViewFiles.size(); i < len ; ++i)
+		struct ViewElem {
+			TiXmlNode *viewNode;
+			vector<sessionFileInfo> *viewFiles;
+			size_t activeIndex;
+		};
+		const int nbElem = 2;
+		ViewElem viewElems[nbElem];
+		viewElems[0].viewNode = sessionNode->InsertEndChild(TiXmlElement(TEXT("mainView")));
+		viewElems[1].viewNode = sessionNode->InsertEndChild(TiXmlElement(TEXT("subView")));
+		viewElems[0].viewFiles = (vector<sessionFileInfo> *)(&(session._mainViewFiles));
+		viewElems[1].viewFiles = (vector<sessionFileInfo> *)(&(session._subViewFiles));
+		viewElems[0].activeIndex = session._activeMainIndex;
+		viewElems[1].activeIndex = session._activeSubIndex;
+
+		for (size_t k = 0; k < nbElem ; ++k)
 		{
-			TiXmlNode *fileNameNode = mainViewNode->InsertEndChild(TiXmlElement(TEXT("File")));
-		
-			(fileNameNode->ToElement())->SetAttribute(TEXT("firstVisibleLine"), session._mainViewFiles[i]._firstVisibleLine);
-			(fileNameNode->ToElement())->SetAttribute(TEXT("xOffset"), session._mainViewFiles[i]._xOffset);
-			(fileNameNode->ToElement())->SetAttribute(TEXT("scrollWidth"), session._mainViewFiles[i]._scrollWidth);
-			(fileNameNode->ToElement())->SetAttribute(TEXT("startPos"), session._mainViewFiles[i]._startPos);
-			(fileNameNode->ToElement())->SetAttribute(TEXT("endPos"), session._mainViewFiles[i]._endPos);
-			(fileNameNode->ToElement())->SetAttribute(TEXT("selMode"), session._mainViewFiles[i]._selMode);
-			(fileNameNode->ToElement())->SetAttribute(TEXT("lang"), session._mainViewFiles[i]._langName.c_str());
-			(fileNameNode->ToElement())->SetAttribute(TEXT("encoding"), session._mainViewFiles[i]._encoding);
-			(fileNameNode->ToElement())->SetAttribute(TEXT("filename"), session._mainViewFiles[i]._fileName.c_str());
+			(viewElems[k].viewNode->ToElement())->SetAttribute(TEXT("activeIndex"), (int)viewElems[k].activeIndex);
+			vector<sessionFileInfo> & viewSessionFiles = *(viewElems[k].viewFiles);
 
-			for (size_t j = 0, len = session._mainViewFiles[i].marks.size() ; j < len ; ++j)
+			for (size_t i = 0, len = viewElems[k].viewFiles->size(); i < len ; ++i)
 			{
-				size_t markLine = session._mainViewFiles[i].marks[j];
-				TiXmlNode *markNode = fileNameNode->InsertEndChild(TiXmlElement(TEXT("Mark")));
-				markNode->ToElement()->SetAttribute(TEXT("line"), markLine);
-			}
+				TiXmlNode *fileNameNode = viewElems[k].viewNode->InsertEndChild(TiXmlElement(TEXT("File")));
 
-			for (size_t j = 0, len = session._mainViewFiles[i]._foldStates.size() ; j < len ; ++j)
-			{
-				size_t foldLine = session._mainViewFiles[i]._foldStates[j];
-				TiXmlNode *foldNode = fileNameNode->InsertEndChild(TiXmlElement(TEXT("Fold")));
-				foldNode->ToElement()->SetAttribute(TEXT("line"), foldLine);
-			}
-		}
-		
-		TiXmlNode *subViewNode = sessionNode->InsertEndChild(TiXmlElement(TEXT("subView")));
-		(subViewNode->ToElement())->SetAttribute(TEXT("activeIndex"), (int)session._activeSubIndex);
-		for (size_t i = 0, len = session._subViewFiles.size(); i < len ; ++i)
-		{
-			TiXmlNode *fileNameNode = subViewNode->InsertEndChild(TiXmlElement(TEXT("File")));
-			
-			(fileNameNode->ToElement())->SetAttribute(TEXT("firstVisibleLine"), session._subViewFiles[i]._firstVisibleLine);
-			(fileNameNode->ToElement())->SetAttribute(TEXT("xOffset"), session._subViewFiles[i]._xOffset);
-			(fileNameNode->ToElement())->SetAttribute(TEXT("scrollWidth"), session._subViewFiles[i]._scrollWidth);
-			(fileNameNode->ToElement())->SetAttribute(TEXT("startPos"), session._subViewFiles[i]._startPos);
-			(fileNameNode->ToElement())->SetAttribute(TEXT("endPos"), session._subViewFiles[i]._endPos);
-			(fileNameNode->ToElement())->SetAttribute(TEXT("selMode"), session._subViewFiles[i]._selMode);
-			(fileNameNode->ToElement())->SetAttribute(TEXT("lang"), session._subViewFiles[i]._langName.c_str());
-			(fileNameNode->ToElement())->SetAttribute(TEXT("encoding"), session._subViewFiles[i]._encoding);
-			(fileNameNode->ToElement())->SetAttribute(TEXT("filename"), session._subViewFiles[i]._fileName.c_str());
+				(fileNameNode->ToElement())->SetAttribute(TEXT("firstVisibleLine"), viewSessionFiles[i]._firstVisibleLine);
+				(fileNameNode->ToElement())->SetAttribute(TEXT("xOffset"), viewSessionFiles[i]._xOffset);
+				(fileNameNode->ToElement())->SetAttribute(TEXT("scrollWidth"), viewSessionFiles[i]._scrollWidth);
+				(fileNameNode->ToElement())->SetAttribute(TEXT("startPos"), viewSessionFiles[i]._startPos);
+				(fileNameNode->ToElement())->SetAttribute(TEXT("endPos"), viewSessionFiles[i]._endPos);
+				(fileNameNode->ToElement())->SetAttribute(TEXT("selMode"), viewSessionFiles[i]._selMode);
+				(fileNameNode->ToElement())->SetAttribute(TEXT("lang"), viewSessionFiles[i]._langName.c_str());
+				(fileNameNode->ToElement())->SetAttribute(TEXT("encoding"), viewSessionFiles[i]._encoding);
+				(fileNameNode->ToElement())->SetAttribute(TEXT("filename"), viewSessionFiles[i]._fileName.c_str());
+				(fileNameNode->ToElement())->SetAttribute(TEXT("backupFilePath"), viewSessionFiles[i]._backupFilePath.c_str());
+				(fileNameNode->ToElement())->SetAttribute(TEXT("originalFileLastModifTimestamp"), int(viewSessionFiles[i]._originalFileLastModifTimestamp));
 
-			for (size_t j = 0, len = session._subViewFiles[i].marks.size(); j < len; ++j)
-			{
-				size_t markLine = session._subViewFiles[i].marks[j];
-				TiXmlNode *markNode = fileNameNode->InsertEndChild(TiXmlElement(TEXT("Mark")));
-				markNode->ToElement()->SetAttribute(TEXT("line"), markLine);
-			}
+				for (size_t j = 0, len = viewSessionFiles[i]._marks.size() ; j < len ; ++j)
+				{
+					size_t markLine = viewSessionFiles[i]._marks[j];
+					TiXmlNode *markNode = fileNameNode->InsertEndChild(TiXmlElement(TEXT("Mark")));
+					markNode->ToElement()->SetAttribute(TEXT("line"), markLine);
+				}
 
-			for (size_t j = 0, len = session._subViewFiles[i]._foldStates.size() ; j < len ; ++j)
-			{
-				size_t foldLine = session._subViewFiles[i]._foldStates[j];
-				TiXmlNode *foldNode = fileNameNode->InsertEndChild(TiXmlElement(TEXT("Fold")));
-				foldNode->ToElement()->SetAttribute(TEXT("line"), foldLine);
+				for (size_t j = 0, len = viewSessionFiles[i]._foldStates.size() ; j < len ; ++j)
+				{
+					size_t foldLine = viewSessionFiles[i]._foldStates[j];
+					TiXmlNode *foldNode = fileNameNode->InsertEndChild(TiXmlElement(TEXT("Fold")));
+					foldNode->ToElement()->SetAttribute(TEXT("line"), foldLine);
+				}
 			}
 		}
 	}
@@ -3441,7 +3833,21 @@ void NppParameters::feedGUIParameters(TiXmlNode *node)
 				}
 			}
 		}
-
+		else if (!lstrcmp(nm, TEXT("DetectEncoding")))
+		{
+			TiXmlNode *n = childNode->FirstChild();
+			if (n)
+			{
+				val = n->Value();
+				if (val)
+				{
+					if (!lstrcmp(val, TEXT("yes")))
+						_nppGUI._detectEncoding = true;
+					else
+						_nppGUI._detectEncoding = false;
+				}
+			}
+		}
 		else if (!lstrcmp(nm, TEXT("MaitainIndent")))
 		{
 			TiXmlNode *n = childNode->FirstChild();
@@ -3690,7 +4096,7 @@ void NppParameters::feedGUIParameters(TiXmlNode *node)
 				_nppGUI._newDocDefaultSettings._format = (formatType)i;
 
 			if (element->Attribute(TEXT("encoding"), &i))
-				_nppGUI._newDocDefaultSettings._encoding = (UniMode)i;
+				_nppGUI._newDocDefaultSettings._unicodeMode = (UniMode)i;
 
 			if (element->Attribute(TEXT("lang"), &i))
 				_nppGUI._newDocDefaultSettings._lang = (LangType)i;
@@ -3902,6 +4308,15 @@ void NppParameters::feedGUIParameters(TiXmlNode *node)
 			const TCHAR *pDir = element->Attribute(TEXT("dir"));
 			if (pDir)
 				_nppGUI._backupDir = pDir;
+			
+			const TCHAR *isSnapshotModeStr = element->Attribute(TEXT("isSnapshotMode"));
+			if (isSnapshotModeStr && !lstrcmp(isSnapshotModeStr, TEXT("no")))
+				_nppGUI._isSnapshotMode = false;
+
+			int timing;
+			if (element->Attribute(TEXT("snapshotBackupTiming"), &timing))
+				_nppGUI._snapshotBackupTiming = timing;
+
 		}
 		else if (!lstrcmp(nm, TEXT("DockingManager")))
 		{
@@ -4135,6 +4550,12 @@ void NppParameters::feedGUIParameters(TiXmlNode *node)
 			if (optName && !lstrcmp(optName, TEXT("yes"))) 
 			{
 				_nppGUI._fileSwitcherWithoutExtColumn = true;
+			}
+
+			const TCHAR * optNameBackSlashEscape = element->Attribute(TEXT("backSlashIsEscapeCharacterForSql"));
+			if (optNameBackSlashEscape && !lstrcmp(optNameBackSlashEscape, TEXT("no"))) 
+			{
+				_nppGUI._backSlashIsEscapeCharacterForSql = false;
 			}
 		}
 	}
@@ -4461,6 +4882,7 @@ bool NppParameters::writeGUIParams()
 	bool checkHistoryFilesExist = false;
 	bool trayIconExist = false;
 	bool rememberLastSessionExist = false;
+	bool detectEncoding = false;
 	bool newDocDefaultSettingsExist = false;
 	bool langsExcludedLstExist = false;
 	bool printSettingExist = false;
@@ -4642,7 +5064,16 @@ bool NppParameters::writeGUIParams()
 			else
 				childNode->InsertEndChild(TiXmlText(pStr));
 		}
-
+		else if (!lstrcmp(nm, TEXT("DetectEncoding")))
+		{
+			detectEncoding = true;
+			const TCHAR *pStr = _nppGUI._detectEncoding?TEXT("yes"):TEXT("no");
+			TiXmlNode *n = childNode->FirstChild();
+			if (n)
+				n->SetValue(pStr);
+			else
+				childNode->InsertEndChild(TiXmlText(pStr));
+		}
 		else if (!lstrcmp(nm, TEXT("MaitainIndent")))
 		{
 			maitainIndentExist = true;
@@ -4721,7 +5152,7 @@ bool NppParameters::writeGUIParams()
 		else if (!lstrcmp(nm, TEXT("NewDocDefaultSettings")))
 		{
 			element->SetAttribute(TEXT("format"), _nppGUI._newDocDefaultSettings._format);
-			element->SetAttribute(TEXT("encoding"), _nppGUI._newDocDefaultSettings._encoding);
+			element->SetAttribute(TEXT("encoding"), _nppGUI._newDocDefaultSettings._unicodeMode);
 			element->SetAttribute(TEXT("lang"), _nppGUI._newDocDefaultSettings._lang);
 			element->SetAttribute(TEXT("codepage"), _nppGUI._newDocDefaultSettings._codepage);
 			element->SetAttribute(TEXT("openAnsiAsUTF8"), _nppGUI._newDocDefaultSettings._openAnsiAsUtf8?TEXT("yes"):TEXT("no"));
@@ -4743,6 +5174,9 @@ bool NppParameters::writeGUIParams()
 			element->SetAttribute(TEXT("action"), _nppGUI._backup);
 			element->SetAttribute(TEXT("useCustumDir"), _nppGUI._useDir?TEXT("yes"):TEXT("no"));
 			element->SetAttribute(TEXT("dir"), _nppGUI._backupDir.c_str());
+
+			element->SetAttribute(TEXT("isSnapshotMode"), _nppGUI._isSnapshotMode && _nppGUI._rememberLastSession?TEXT("yes"):TEXT("no"));
+			element->SetAttribute(TEXT("snapshotBackupTiming"), _nppGUI._snapshotBackupTiming);
 			backExist = true;
 		}
 		else if (!lstrcmp(nm, TEXT("MRU")))
@@ -4862,6 +5296,9 @@ bool NppParameters::writeGUIParams()
      
 			const TCHAR * pStr = _nppGUI._fileSwitcherWithoutExtColumn?TEXT("yes"):TEXT("no");
 			element->SetAttribute(TEXT("fileSwitcherWithoutExtColumn"), pStr);
+			
+			const TCHAR * pStrBackSlashEscape = _nppGUI._backSlashIsEscapeCharacterForSql ? TEXT("yes") : TEXT("no");
+			element->SetAttribute(TEXT("backSlashIsEscapeCharacterForSql"), pStrBackSlashEscape);
 		}
 		else if (!lstrcmp(nm, TEXT("sessionExt")))
 		{
@@ -4982,13 +5419,16 @@ bool NppParameters::writeGUIParams()
 	{
 		insertGUIConfigBoolNode(GUIRoot, TEXT("RememberLastSession"), _nppGUI._rememberLastSession);
 	}
-
+	if (!detectEncoding)
+	{
+		insertGUIConfigBoolNode(GUIRoot, TEXT("DetectEncoding"), _nppGUI._detectEncoding);
+	}
 	if (!newDocDefaultSettingsExist)
 	{
 		TiXmlElement *GUIConfigElement = (GUIRoot->InsertEndChild(TiXmlElement(TEXT("GUIConfig"))))->ToElement();
 		GUIConfigElement->SetAttribute(TEXT("name"), TEXT("NewDocDefaultSettings"));
 		GUIConfigElement->SetAttribute(TEXT("format"), _nppGUI._newDocDefaultSettings._format);
-		GUIConfigElement->SetAttribute(TEXT("encoding"), _nppGUI._newDocDefaultSettings._encoding);
+		GUIConfigElement->SetAttribute(TEXT("encoding"), _nppGUI._newDocDefaultSettings._unicodeMode);
 		GUIConfigElement->SetAttribute(TEXT("lang"), _nppGUI._newDocDefaultSettings._lang);
 		GUIConfigElement->SetAttribute(TEXT("codepage"), _nppGUI._newDocDefaultSettings._codepage);
 		GUIConfigElement->SetAttribute(TEXT("openAnsiAsUTF8"), _nppGUI._newDocDefaultSettings._openAnsiAsUtf8?TEXT("yes"):TEXT("no"));
@@ -5015,6 +5455,9 @@ bool NppParameters::writeGUIParams()
 		GUIConfigElement->SetAttribute(TEXT("action"), _nppGUI._backup);
 		GUIConfigElement->SetAttribute(TEXT("useCustumDir"), _nppGUI._useDir?TEXT("yes"):TEXT("no"));
 		GUIConfigElement->SetAttribute(TEXT("dir"), _nppGUI._backupDir.c_str());
+
+		GUIConfigElement->SetAttribute(TEXT("isSnapshotMode"), _nppGUI.isSnapshotMode()?TEXT("yes"):TEXT("no"));
+		GUIConfigElement->SetAttribute(TEXT("snapshotBackupTiming"), _nppGUI._snapshotBackupTiming);
 	}
 
 	if (!doTaskListExist)
@@ -5164,8 +5607,9 @@ bool NppParameters::writeGUIParams()
 	{
 		TiXmlElement *GUIConfigElement = (GUIRoot->InsertEndChild(TiXmlElement(TEXT("GUIConfig"))))->ToElement();
 		GUIConfigElement->SetAttribute(TEXT("name"), TEXT("MISC"));
-		
+
 		GUIConfigElement->SetAttribute(TEXT("fileSwitcherWithoutExtColumn"), _nppGUI._fileSwitcherWithoutExtColumn?TEXT("yes"):TEXT("no"));
+		GUIConfigElement->SetAttribute(TEXT("backSlashIsEscapeCharacterForSql"), _nppGUI._backSlashIsEscapeCharacterForSql?TEXT("yes"):TEXT("no"));
 	}
 	insertDockingParamNode(GUIRoot);
 	return true;

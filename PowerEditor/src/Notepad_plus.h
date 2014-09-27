@@ -198,6 +198,7 @@ class FunctionListPanel;
 class Notepad_plus {
 
 friend class Notepad_plus_Window;
+friend class FileManager;
 
 public:
 	Notepad_plus();
@@ -220,10 +221,10 @@ public:
 
 // fileOperations
 	//The doXXX functions apply to a single buffer and dont need to worry about views, with the excpetion of doClose, since closing one view doesnt have to mean the document is gone
-	BufferID doOpen(const TCHAR *fileName, bool isRecursive = false, bool isReadOnly = false, int encoding = -1);
+	BufferID doOpen(const TCHAR *fileName, bool isRecursive = false, bool isReadOnly = false, int encoding = -1, const TCHAR *backupFileName = NULL, time_t fileNameTimestamp = 0);
 	bool doReload(BufferID id, bool alert = true);
 	bool doSave(BufferID, const TCHAR * filename, bool isSaveCopy = false);
-	void doClose(BufferID, int whichOne);
+	void doClose(BufferID, int whichOne, bool doDeleteBackup = false);
 	//bool doDelete(const TCHAR *fileName) const {return ::DeleteFile(fileName) != 0;};
 
 	void fileOpen();
@@ -235,7 +236,7 @@ public:
     };
 
 	bool fileClose(BufferID id = BUFFER_INVALID, int curView = -1);	//use curView to override view to close from
-	bool fileCloseAll();
+	bool fileCloseAll(bool doDeleteBackup, bool isSnapshotMode = false);
 	bool fileCloseAllButCurrent();
 	bool fileCloseAllGiven(const std::vector<int> &krvecBufferIndexes);
 	bool fileCloseAllToLeft();
@@ -266,12 +267,14 @@ public:
         NppParameters::getInstance()->writeShortcuts();
     };
 	void saveSession(const Session & session);
+	void saveCurrentSession();
+
     void saveFindHistory(){
         _findReplaceDlg.saveFindHistory();
 	    (NppParameters::getInstance())->writeFindHistory();
     };
 
-	void getCurrentOpenedFiles(Session & session);
+	void getCurrentOpenedFiles(Session & session, bool includUntitledDoc = false);
 
 	bool fileLoadSession(const TCHAR *fn = NULL);
 	const TCHAR * fileSaveSession(size_t nbFile, TCHAR ** fileNames, const TCHAR *sessionFile2save);
@@ -286,25 +289,23 @@ public:
 	bool addCurrentMacro();
 	void macroPlayback(Macro);
     
-    void loadLastSession(){
-    	Session lastSession = (NppParameters::getInstance())->getSession();
-	    loadSession(lastSession);
-    };
-
-	bool loadSession(Session & session);
-
+    void loadLastSession();
+	bool loadSession(Session & session, bool isSnapshotMode = false);
 	
-
 	void notifyBufferChanged(Buffer * buffer, int mask);
 	bool findInFiles();
 	bool replaceInFiles();
 	void setFindReplaceFolderFilter(const TCHAR *dir, const TCHAR *filters);
 	vector<generic_string> addNppComponents(const TCHAR *destDir, const TCHAR *extFilterName, const TCHAR *extFilter);
     int getHtmlXmlEncoding(const TCHAR *fileName) const;
-		HACCEL getAccTable() const{
+	HACCEL getAccTable() const{
 		return _accelerator.getAccTable();
 	};
 	bool emergency(generic_string emergencySavedDir);
+	Buffer * getCurrentBuffer()	{
+		return _pEditView->getCurrentBuffer();
+	};
+	void launchDocumentBackupTask();
 
 	
 private:
@@ -327,7 +328,6 @@ private:
     ScintillaEditView _mainEditView;
 	ScintillaEditView _invisibleEditView;	//for searches
 	ScintillaEditView _fileEditView;		//for FileManager
-
     ScintillaEditView *_pEditView;
 	ScintillaEditView *_pNonEditView;
 
@@ -422,8 +422,6 @@ private:
 
 	vector<pair<int, int> > _hideLinesMarks;
 	StyleArray _hotspotStyles;
-    bool _rememberThisSession; // always true. except -nosession is indicated on the launch time
-
 
 	AnsiCharPanel *_pAnsiCharPanel;
 	ClipboardHistoryPanel *_pClipboardHistoryPanel;
@@ -640,6 +638,7 @@ private:
 			return randomNumber;
 		return (rand() % rangeMax);
 	};
+	static DWORD WINAPI backupDocument(void *params);
 };
 
 

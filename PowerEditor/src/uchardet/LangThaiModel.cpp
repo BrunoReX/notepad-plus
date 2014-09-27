@@ -34,7 +34,7 @@
  * the terms of any one of the MPL, the GPL or the LGPL.
  *
  * ***** END LICENSE BLOCK ***** */
-
+#include "precompiledHeaders.h"
 #include "nsSBCharSetProber.h"
 
 
@@ -211,11 +211,10 @@ static const PRUint8 ThaiLangModel[] =
 };
 
 
-const SequenceModel TIS620ThaiModel = 
-{
+const SequenceModel TIS620ThaiModel(  
   TIS620CharToOrderMap,
   ThaiLangModel,
   (float)0.926386,
   PR_FALSE,
   "TIS-620"
-};
+);

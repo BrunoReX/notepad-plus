@@ -36,7 +36,7 @@
  * the terms of any one of the MPL, the GPL or the LGPL.
  *
  * ***** END LICENSE BLOCK ***** */
-
+#include "precompiledHeaders.h"
 #include "nsSBCharSetProber.h"
 
 
@@ -208,12 +208,10 @@ static const PRUint8 HebrewLangModel[] =
 0,0,0,0,0,0,0,0,0,0,1,2,1,0,0,0,0,0,1,1,1,1,1,0,1,0,0,0,1,1,0,0,
 };
 
-const SequenceModel Win1255Model = 
-{
+const SequenceModel Win1255Model(
   win1255_CharToOrderMap,
   HebrewLangModel,
   (float)0.984004,
   PR_FALSE,
-  "windows-1255"
-};
+  "windows-1255");
 

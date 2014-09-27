@@ -155,17 +155,16 @@ ECHO Run buildboost.bat without parameters to see the usage.
 
 
 :TOOLSETKNOWN
-
 :: VS2013
 IF [%MSVCTOOLSET%]==[msvc-12.0] (
 	SET BOOSTLIBPATH=%BOOSTPATH%\bin.v2\libs\regex\build\msvc-12.0
 )
- 
+
 :: VS2012
 IF [%MSVCTOOLSET%]==[msvc-11.0] (
 	SET BOOSTLIBPATH=%BOOSTPATH%\bin.v2\libs\regex\build\msvc-11.0
 )
-  
+
 :: VS2010
 IF [%MSVCTOOLSET%]==[msvc-10.0] (
 	SET BOOSTLIBPATH=%BOOSTPATH%\bin.v2\libs\regex\build\msvc-10.0

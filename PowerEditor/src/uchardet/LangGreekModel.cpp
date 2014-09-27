@@ -34,7 +34,7 @@
  * the terms of any one of the MPL, the GPL or the LGPL.
  *
  * ***** END LICENSE BLOCK ***** */
-
+#include "precompiledHeaders.h"
 #include "nsSBCharSetProber.h"
 /****************************************************************
 255: Control characters that usually does not exist in any text
@@ -225,20 +225,18 @@ static const PRUint8 GreekLangModel[] =
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 };
 
-const SequenceModel Latin7Model = 
-{
+const SequenceModel Latin7Model ( 
   Latin7_CharToOrderMap,
   GreekLangModel,
   (float)0.982851,
   PR_FALSE,
   "ISO-8859-7"
-};
+);
 
-const SequenceModel Win1253Model = 
-{
+const SequenceModel Win1253Model(
   win1253_CharToOrderMap,
   GreekLangModel,
   (float)0.982851,
   PR_FALSE,
   "windows-1253"
-};
+);

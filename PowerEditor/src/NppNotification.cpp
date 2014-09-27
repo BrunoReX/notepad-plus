@@ -55,12 +55,17 @@ BOOL Notepad_plus::notify(SCNotification *notification)
 				::InvalidateRect(notifyView->getHSelf(), NULL, TRUE);
 			}
 
+			if (notification->modificationType & (SC_MOD_DELETETEXT | SC_MOD_INSERTTEXT | SC_PERFORMED_UNDO | SC_PERFORMED_REDO))
+			{
+				// for the backup system
+				_pEditView->getCurrentBuffer()->setModifiedStatus(true);
+			}
+
 			if (notification->modificationType & SC_MOD_CHANGEFOLD)
 			{
 				if (prevWasEdit) 
 				{
-					notifyView->foldChanged(notification->line,
-							notification->foldLevelNow, notification->foldLevelPrev);
+					notifyView->foldChanged(notification->line, notification->foldLevelNow, notification->foldLevelPrev);
 					prevWasEdit = false;
 				}
 			}
@@ -68,6 +73,8 @@ BOOL Notepad_plus::notify(SCNotification *notification)
 			{
 				prevWasEdit = false;
 			}
+
+
 		}
 		break;
 
@@ -75,11 +82,16 @@ BOOL Notepad_plus::notify(SCNotification *notification)
 		case SCN_SAVEPOINTLEFT:
 		{
 			Buffer * buf = 0;
-			if (isFromPrimary) {
+			if (isFromPrimary)
+			{
 				buf = _mainEditView.getCurrentBuffer();
-			} else if (isFromSecondary) {
+			}
+			else if (isFromSecondary)
+			{
 				buf = _subEditView.getCurrentBuffer();
-			} else {
+			}
+			else
+			{
 				//Done by invisibleEditView?
 				BufferID id = BUFFER_INVALID;
 				if (notification->nmhdr.hwndFrom == _invisibleEditView.getHSelf()) {
@@ -208,19 +220,12 @@ BOOL Notepad_plus::notify(SCNotification *notification)
 		BufferID bufferToClose = notifyDocTab->getBufferByIndex(index);
 		Buffer * buf = MainFileManager->getBufferByID(bufferToClose);
 		int iView = isFromPrimary?MAIN_VIEW:SUB_VIEW;
-		if (buf->isDirty()) {	//activate and use fileClose() (for save and abort)
+		if (buf->isDirty())
+		{
 			activateBuffer(bufferToClose, iView);
-			fileClose(bufferToClose, iView);
-			break;
 		}
-		int open = 1;
-		if (isFromPrimary || isFromSecondary)
-			open = notifyDocTab->nbItem();
-		doClose(bufferToClose, iView);
-		//if (open == 1 && canHideView(iView))
-		//	hideView(iView);
+		fileClose(bufferToClose, iView);
 		break;
-
 	}
 
 	case TCN_SELCHANGE:
@@ -259,12 +264,26 @@ BOOL Notepad_plus::notify(SCNotification *notification)
 				_statusBar.setText((_pEditView->execute(SCI_GETOVERTYPE))?TEXT("OVR"):TEXT("INS"), STATUSBAR_TYPING_MODE);
 			}
         }
-		else if (notification->nmhdr.hwndFrom == _mainDocTab.getHSelf())
+		else if (notification->nmhdr.hwndFrom == _mainDocTab.getHSelf() && _activeView == SUB_VIEW)
 		{
+			bool isSnapshotMode = NppParameters::getInstance()->getNppGUI().isSnapshotMode();
+			if (isSnapshotMode)
+			{
+				// Before switching off, synchronize backup file
+				MainFileManager->backupCurrentBuffer();
+			}
+			// Switch off
             switchEditViewTo(MAIN_VIEW);
 		}
-        else if (notification->nmhdr.hwndFrom == _subDocTab.getHSelf())
+        else if (notification->nmhdr.hwndFrom == _subDocTab.getHSelf() && _activeView == MAIN_VIEW)
         {
+			bool isSnapshotMode = NppParameters::getInstance()->getNppGUI().isSnapshotMode();
+			if (isSnapshotMode)
+			{
+				// Before switching off, synchronize backup file
+				MainFileManager->backupCurrentBuffer();
+			}
+			// Switch off
             switchEditViewTo(SUB_VIEW);
         }
 

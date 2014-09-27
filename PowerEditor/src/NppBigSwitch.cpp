@@ -31,8 +31,12 @@
 #include "TaskListDlg.h"
 #include "ImageListSet.h"
 #include "ShortcutMapper.h"
+#include "ansiCharPanel.h"
+#include "clipboardHistoryPanel.h"
 #include "VerticalFileSwitcher.h"
+#include "ProjectPanel.h"
 #include "documentMap.h"
+#include "functionListPanel.h"
 
 #define WM_DPICHANGED 0x02E0
 
@@ -474,7 +478,8 @@ LRESULT Notepad_plus::process(HWND hwnd, UINT Message, WPARAM wParam, LPARAM lPa
 				{
                     CmdLineParams *cmdLineParam = (CmdLineParams *)pCopyData->lpData;
 					pNppParam->setCmdlineParam(*cmdLineParam);
-                    _rememberThisSession = !cmdLineParam->_isNoSession;
+					NppGUI nppGui = (NppGUI)pNppParam->getNppGUI();
+					nppGui._isCmdlineNosessionActivated = cmdLineParam->_isNoSession;
 					break;
 				}
 
@@ -501,6 +506,7 @@ LRESULT Notepad_plus::process(HWND hwnd, UINT Message, WPARAM wParam, LPARAM lPa
         }
 
 		case WM_COMMAND:
+		{
             if (HIWORD(wParam) == SCEN_SETFOCUS)
             {
 				HWND hMain = _mainEditView.getHSelf(), hSec = _subEditView.getHSelf();
@@ -523,7 +529,22 @@ LRESULT Notepad_plus::process(HWND hwnd, UINT Message, WPARAM wParam, LPARAM lPa
 				else
 					command(LOWORD(wParam));
 			}
-			return TRUE;
+		}
+		return TRUE;
+
+		case NPPM_INTERNAL_SAVECURRENTSESSION:
+		{
+			NppParameters *nppParam = NppParameters::getInstance();
+			const NppGUI nppGui = nppParam->getNppGUI();
+
+			if (nppGui._rememberLastSession && !nppGui._isCmdlineNosessionActivated)
+			{
+				Session currentSession;
+				getCurrentOpenedFiles(currentSession, true);
+				nppParam->writeSession(currentSession);
+			}	
+		}
+		return TRUE;
 
 		case NPPM_INTERNAL_RELOADNATIVELANG:
 		{
@@ -1050,6 +1071,13 @@ LRESULT Notepad_plus::process(HWND hwnd, UINT Message, WPARAM wParam, LPARAM lPa
 			return (LRESULT)_scintillaCtrls4Plugins.getScintillaEditViewFrom((HWND)lParam);
 		}
 
+		case NPPM_INTERNAL_ENABLESNAPSHOT:
+		{
+			launchDocumentBackupTask();
+			return TRUE;
+		}
+
+
 		case NPPM_DESTROYSCINTILLAHANDLE :
 		{
 			return _scintillaCtrls4Plugins.destroyScintilla((HWND)lParam);
@@ -1370,12 +1398,67 @@ LRESULT Notepad_plus::process(HWND hwnd, UINT Message, WPARAM wParam, LPARAM lPa
 		{
 			//reset styler for change in Stylers.xml
 			_mainEditView.defineDocType(_mainEditView.getCurrentBuffer()->getLangType());
-			_subEditView.defineDocType(_subEditView.getCurrentBuffer()->getLangType());
 			_mainEditView.performGlobalStyles();
+
+			_subEditView.defineDocType(_subEditView.getCurrentBuffer()->getLangType());
 			_subEditView.performGlobalStyles();
+			
 			_findReplaceDlg.updateFinderScintilla();
 
 			drawTabbarColoursFromStylerArray();
+
+			// Update default fg/bg colors in Parameters for both internal/plugins docking dialog
+			StyleArray & globalStyles = (NppParameters::getInstance())->getGlobalStylers();
+			int i = globalStyles.getStylerIndexByID(STYLE_DEFAULT);
+			Style & style = globalStyles.getStyler(i);
+			(NppParameters::getInstance())->setCurrentDefaultFgColor(style._fgColor);
+			(NppParameters::getInstance())->setCurrentDefaultBgColor(style._bgColor);
+
+			// Set default fg/bg colors on internal docking dialog
+			if (_pFuncList)
+			{
+				_pFuncList->setBackgroundColor(style._bgColor);
+				_pFuncList->setForegroundColor(style._fgColor);
+			}
+
+			if (_pAnsiCharPanel)
+			{
+				_pAnsiCharPanel->setBackgroundColor(style._bgColor);
+				_pAnsiCharPanel->setForegroundColor(style._fgColor);
+			}
+
+			if (_pFileSwitcherPanel)
+			{
+				_pFileSwitcherPanel->setBackgroundColor(style._bgColor);
+				_pFileSwitcherPanel->setForegroundColor(style._fgColor);
+			}
+
+			if (_pClipboardHistoryPanel)
+			{
+				_pClipboardHistoryPanel->setBackgroundColor(style._bgColor);
+				_pClipboardHistoryPanel->setForegroundColor(style._fgColor);
+				_pClipboardHistoryPanel->redraw(true);
+			}
+
+			if (_pProjectPanel_1)
+			{
+				_pProjectPanel_1->setBackgroundColor(style._bgColor);
+				_pProjectPanel_1->setForegroundColor(style._fgColor);
+			}
+			if (_pProjectPanel_2)
+			{
+				_pProjectPanel_2->setBackgroundColor(style._bgColor);
+				_pProjectPanel_2->setForegroundColor(style._fgColor);
+			}
+			if (_pProjectPanel_3)
+			{
+				_pProjectPanel_3->setBackgroundColor(style._bgColor);
+				_pProjectPanel_3->setForegroundColor(style._fgColor);
+			}
+			if (_pDocMap)
+			{
+				_pDocMap->setSyntaxHiliting();
+			}
 
 			// Notify plugins of update to styles xml
 			SCNotification scnN;
@@ -1399,15 +1482,20 @@ LRESULT Notepad_plus::process(HWND hwnd, UINT Message, WPARAM wParam, LPARAM lPa
                     _pTrayIco->doTrayIcon(REMOVE);
 
 			    const NppGUI & nppgui = pNppParam->getNppGUI();
+				
+				bool isSnapshotMode = nppgui.isSnapshotMode();
+				if (isSnapshotMode)
+					MainFileManager->backupCurrentBuffer();
+
 			    Session currentSession;
 			    if (nppgui._rememberLastSession) 
 			    {
-				    getCurrentOpenedFiles(currentSession);
+				    getCurrentOpenedFiles(currentSession, true);
 				    //Lock the recent file list so it isnt populated with opened files
 				    //Causing them to show on restart even though they are loaded by session
 				    _lastRecentFileList.setLock(true);	//only lock when the session is remembered
 			    }
-			    bool allClosed = fileCloseAll();	//try closing files before doing anything else
+				bool allClosed = fileCloseAll(false, isSnapshotMode);	//try closing files before doing anything else
     			
 			    if (nppgui._rememberLastSession) 
 			    {
@@ -1434,21 +1522,37 @@ LRESULT Notepad_plus::process(HWND hwnd, UINT Message, WPARAM wParam, LPARAM lPa
 			    scnN.nmhdr.idFrom = 0;
 			    _pluginsManager.notify(&scnN);
 
-				//
-				// saving config.xml
-				//
 			    saveFindHistory(); //writeFindHistory
 			    _lastRecentFileList.saveLRFL(); //writeRecentFileHistorySettings, writeHistory
 			    saveScintillaParams(); //writeScintillaParams
 			    saveGUIParams(); //writeGUIParams
 				saveProjectPanelsParams(); //writeProjectPanelsSettings
+				//
+				// saving config.xml
+				//
 				pNppParam->saveConfig_xml();
-
-
+				
+				//
+				// saving userDefineLang.xml
+				//
 			    saveUserDefineLangs();
+				
+				//
+				// saving shortcuts.xml
+				//
 			    saveShortcuts();
-			    if (nppgui._rememberLastSession && _rememberThisSession)
+
+				//
+				// saving session.xml
+				//
+			    if (nppgui._rememberLastSession && !nppgui._isCmdlineNosessionActivated)
 				    saveSession(currentSession);
+
+				// write settings on cloud if enabled, if the settings files don't exist
+				if (nppgui._cloudChoice != noCloud)
+				{
+					pNppParam->writeSettingsFilesOnCloudForThe1stTime(nppgui._cloudChoice);
+				}
 
                 //Sends WM_DESTROY, Notepad++ will end
 				if(Message == WM_CLOSE)
@@ -1860,6 +1964,18 @@ LRESULT Notepad_plus::process(HWND hwnd, UINT Message, WPARAM wParam, LPARAM lPa
 			}
 			// else nothing to do
 			return TRUE;
+		}
+
+		case NPPM_GETEDITORDEFAULTFOREGROUNDCOLOR:
+		case NPPM_GETEDITORDEFAULTBACKGROUNDCOLOR:
+		{
+			return (Message == NPPM_GETEDITORDEFAULTFOREGROUNDCOLOR?(NppParameters::getInstance())->getCurrentDefaultFgColor():(NppParameters::getInstance())->getCurrentDefaultBgColor());
+			/*
+			StyleArray & globalStyles = (NppParameters::getInstance())->getGlobalStylers();
+			int i = globalStyles.getStylerIndexByID(STYLE_DEFAULT);
+			Style & style = globalStyles.getStyler(i);
+			return (Message == NPPM_GETEDITORDEFAULTFOREGROUNDCOLOR?style._fgColor:style._bgColor);
+			*/
 		}
 
 		case NPPM_SHOWDOCSWITCHER:

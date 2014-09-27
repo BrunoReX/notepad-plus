@@ -28,10 +28,10 @@
 ; Define the application name
 !define APPNAME "Notepad++"
 
-!define APPVERSION "6.5.5"
+!define APPVERSION "6.6.9"
 !define APPNAMEANDVERSION "${APPNAME} v${APPVERSION}"
 !define VERSION_MAJOR 6
-!define VERSION_MINOR 55
+!define VERSION_MINOR 69
 
 !define APPWEBSITE "http://notepad-plus-plus.org/"
 
@@ -541,12 +541,12 @@ Section -"Notepad++" mainSection
 		Delete "$INSTDIR\plugins\NppPlugin_ChangeMarker.dll"
 		
 	IfFileExists "$INSTDIR\plugins\QuickText.UNI.dll" 0 +4
-		MessageBox MB_OK "Due to the stability issue,$\n\QuickText.UNI.dll will be moved to the directory $\"disabled$\"" /SD IDOK
+		MessageBox MB_OK "Due to the stability issue,$\nQuickText.UNI.dll will be moved to the directory $\"disabled$\"" /SD IDOK
 		Rename "$INSTDIR\plugins\QuickText.UNI.dll" "$INSTDIR\plugins\disabled\QuickText.UNI.dll"
 		Delete "$INSTDIR\plugins\QuickText.UNI.dll"
 
 	IfFileExists "$INSTDIR\plugins\AHKExternalLexer.dll" 0 +4
-		MessageBox MB_OK "Due to the compability issue,$\n\AHKExternalLexer.dll will be moved to the directory $\"disabled$\"" /SD IDOK
+		MessageBox MB_OK "Due to the compability issue,$\nAHKExternalLexer.dll will be moved to the directory $\"disabled$\"" /SD IDOK
 		Rename "$INSTDIR\plugins\AHKExternalLexer.dll" "$INSTDIR\plugins\disabled\AHKExternalLexer.dll"
 		Delete "$INSTDIR\plugins\AHKExternalLexer.dll"
 
@@ -577,9 +577,14 @@ Section -"Notepad++" mainSection
 		Delete "$INSTDIR\plugins\PreviewHTML.dll"
 		
 	IfFileExists "$INSTDIR\plugins\nppRegEx.dll" 0 +4
-		MessageBox MB_OK "Due to the stability issue,$\nppRegEx.dll will be moved to the directory $\"disabled$\"" /SD IDOK
+		MessageBox MB_OK "Due to the stability issue,$\nnppRegEx.dll will be moved to the directory $\"disabled$\"" /SD IDOK
 		Rename "$INSTDIR\plugins\nppRegEx.dll" "$INSTDIR\plugins\disabled\nppRegEx.dll"
 		Delete "$INSTDIR\plugins\nppRegEx.dll"
+		
+	IfFileExists "$INSTDIR\plugins\AutoSaveU.dll" 0 +4
+		MessageBox MB_OK "Due to the stability issue,$\nAutoSaveU.dll will be moved to the directory $\"disabled$\"" /SD IDOK
+		Rename "$INSTDIR\plugins\AutoSaveU.dll" "$INSTDIR\plugins\disabled\AutoSaveU.dll"
+		Delete "$INSTDIR\plugins\AutoSaveU.dll"
 		
     ; Context Menu Management : removing old version of Context Menu module
 	IfFileExists "$INSTDIR\nppcm.dll" 0 +3
@@ -605,6 +610,10 @@ Section -"Notepad++" mainSection
 	IfFileExists "$INSTDIR\NppShell_04.dll" 0 +3
 		Exec 'regsvr32 /u /s "$INSTDIR\NppShell_04.dll"'
 		Delete "$INSTDIR\NppShell_04.dll"
+		
+	IfFileExists "$INSTDIR\NppShell_05.dll" 0 +3
+		Exec 'regsvr32 /u /s "$INSTDIR\NppShell_05.dll"'
+		Delete "$INSTDIR\NppShell_05.dll"
 		
 	; detect the right of 
 	UserInfo::GetAccountType
@@ -635,12 +644,12 @@ Section "Context Menu Entry" explorerContextMenu
 	SetOverwrite try
 	SetOutPath "$INSTDIR\"
 	${If} ${RunningX64}
-		File /oname=$INSTDIR\NppShell_05.dll "..\bin\NppShell64_05.dll"
+		File /oname=$INSTDIR\NppShell_06.dll "..\bin\NppShell64_06.dll"
 	${Else}
-		File "..\bin\NppShell_05.dll"
+		File "..\bin\NppShell_06.dll"
 	${EndIf}
 	
-	Exec 'regsvr32 /s "$INSTDIR\NppShell_05.dll"'
+	Exec 'regsvr32 /s "$INSTDIR\NppShell_06.dll"'
 SectionEnd
 
 SectionGroup "Auto-completion Files" autoCompletionComponent
@@ -899,6 +908,9 @@ SectionGroup "Localization" localization
 	Section /o "Greek" greek
 		CopyFiles "$TEMP\nppLocalization\greek.xml" "$INSTDIR\localization\greek.xml"
 	SectionEnd
+	Section /o "Gujarati" gujarati
+		CopyFiles "$TEMP\nppLocalization\gujarati.xml" "$INSTDIR\localization\gujarati.xml"
+	SectionEnd
 	Section /o "Hebrew" hebrew
 		CopyFiles "$TEMP\nppLocalization\hebrew.xml" "$INSTDIR\localization\hebrew.xml"
 	SectionEnd
@@ -946,6 +958,9 @@ SectionGroup "Localization" localization
 	SectionEnd
 	Section /o "Malay" malay
 		CopyFiles "$TEMP\nppLocalization\malay.xml" "$INSTDIR\localization\malay.xml"
+	SectionEnd
+	Section /o "Mongolian" mongolian
+		CopyFiles "$TEMP\nppLocalization\mongolian.xml" "$INSTDIR\localization\mongolian.xml"
 	SectionEnd
 	Section /o "Norwegian" norwegian
 		CopyFiles "$TEMP\nppLocalization\norwegian.xml" "$INSTDIR\localization\norwegian.xml"
@@ -1607,6 +1622,9 @@ SectionGroup un.localization
 	Section un.greek
 		Delete "$INSTDIR\localization\greek.xml"
 	SectionEnd
+	Section un.gujarati
+		Delete "$INSTDIR\localization\gujarati.xml"
+	SectionEnd
 	Section un.hebrew
 		Delete "$INSTDIR\localization\hebrew.xml"
 	SectionEnd
@@ -1654,6 +1672,9 @@ SectionGroup un.localization
 	SectionEnd
 	Section un.malay
 		Delete "$INSTDIR\localization\malay.xml"
+	SectionEnd
+	Section un.mongolian
+		Delete "$INSTDIR\localization\mongolian.xml"
 	SectionEnd
 	Section un.norwegian
 		Delete "$INSTDIR\localization\norwegian.xml"
@@ -1768,11 +1789,13 @@ Section un.explorerContextMenu
 	Exec 'regsvr32 /u /s "$INSTDIR\NppShell_03.dll"'
 	Exec 'regsvr32 /u /s "$INSTDIR\NppShell_04.dll"'
 	Exec 'regsvr32 /u /s "$INSTDIR\NppShell_05.dll"'
+	Exec 'regsvr32 /u /s "$INSTDIR\NppShell_06.dll"'
 	Delete "$INSTDIR\NppShell_01.dll"
 	Delete "$INSTDIR\NppShell_02.dll"
 	Delete "$INSTDIR\NppShell_03.dll"
 	Delete "$INSTDIR\NppShell_04.dll"
 	Delete "$INSTDIR\NppShell_05.dll"
+	Delete "$INSTDIR\NppShell_06.dll"
 SectionEnd
 
 Section un.UnregisterFileExt

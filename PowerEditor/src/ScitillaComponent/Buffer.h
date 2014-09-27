@@ -82,7 +82,7 @@ public:
 
 	void addBufferReference(BufferID id, ScintillaEditView * identifer);	//called by Scintilla etc indirectly
 
-	BufferID loadFile(const TCHAR * filename, Document doc = NULL, int encoding = -1);	//ID == BUFFER_INVALID on failure. If Doc == NULL, a new file is created, otherwise data is loaded in given document
+	BufferID loadFile(const TCHAR * filename, Document doc = NULL, int encoding = -1, const TCHAR *backupFileName = NULL, time_t fileNameTimestamp = 0);	//ID == BUFFER_INVALID on failure. If Doc == NULL, a new file is created, otherwise data is loaded in given document
 	BufferID newEmptyDocument();
 	//create Buffer from existing Scintilla, used from new Scintillas. If dontIncrease = true, then the new document number isnt increased afterwards.
 	//usefull for temporary but neccesary docs
@@ -95,33 +95,26 @@ public:
 	bool reloadBuffer(BufferID id);
 	bool reloadBufferDeferred(BufferID id);
 	bool saveBuffer(BufferID id, const TCHAR * filename, bool isCopy = false, generic_string * error_msg = NULL);
+	bool backupCurrentBuffer();
+	bool deleteCurrentBufferBackup();
 	bool deleteFile(BufferID id);
 	bool moveFile(BufferID id, const TCHAR * newFilename);
-
 	bool createEmptyFile(const TCHAR * path);
-
 	static FileManager * getInstance() {return _pSelf;};
 	void destroyInstance() { delete _pSelf; };
-
-	void increaseDocNr() {_nextNewNumber++;};
-
 	int getFileNameFromBuffer(BufferID id, TCHAR * fn2copy);
-	
 	int docLength(Buffer * buffer) const;
-
 	int getEOLFormatForm(const char *data) const;
+	size_t nextUntitledNewNumber() const;
 
 private:
-	FileManager() : _nextNewNumber(1), _nextBufferID(0), _pNotepadPlus(NULL), _nrBufs(0), _pscratchTilla(NULL){};
+	FileManager() : _nextBufferID(0), _pNotepadPlus(NULL), _nrBufs(0), _pscratchTilla(NULL){};
 	~FileManager();
 	static FileManager *_pSelf;
 
 	Notepad_plus * _pNotepadPlus;
 	ScintillaEditView * _pscratchTilla;
 	Document _scratchDocDefault;
-
-	int _nextNewNumber;
-
 	std::vector<Buffer *> _buffers;
 	BufferID _nextBufferID;
 	size_t _nrBufs;
@@ -323,6 +316,13 @@ public :
 	generic_string getFileTime(fileTimeType ftt);
 
     Lang * getCurrentLang() const;
+	
+	bool isModified() const {return _isModified;};
+	void setModifiedStatus(bool isModified) {_isModified = isModified;};
+	generic_string getBackupFileName() const {return _backupFileName;};
+	void setBackupFileName(generic_string fileName) {_backupFileName = fileName;};
+	time_t getLastModifiedTimestamp() const {return _timeStamp;};
+
 private :
 	FileManager * _pManager;
 	bool _canNotify;
@@ -350,6 +350,7 @@ private :
 	//Environment properties
 	DocFileStatus _currentStatus;
 	time_t _timeStamp; // 0 if it's a new doc
+	//time_t _backupModifiedTimeStamp; // 0 if backup file is not created
 	bool _isFileReadOnly;
 	generic_string _fullPathName;
 	TCHAR * _fileName;	//points to filename part in _fullPathName
@@ -357,6 +358,10 @@ private :
 
 	long _recentTag;
 	static long _recentTagCtr;
+
+	// For backup system
+	generic_string _backupFileName; // default: ""
+	bool _isModified; // default: false
 
 	void updateTimeStamp();
 
