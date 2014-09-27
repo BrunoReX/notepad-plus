@@ -213,6 +213,19 @@ private :
 	RECT _closerRect, _closerLabelRect;
 };
 
+class SettingsOnCloudDlg : public StaticDialog
+{
+public :
+	SettingsOnCloudDlg(): _initialCloudChoice(noCloud) {};
+
+private :
+	CloudChoice _initialCloudChoice;
+
+	BOOL CALLBACK run_dlgProc(UINT Message, WPARAM wParam, LPARAM lParam);
+	void setCloudChoice(const char *choice);
+	void removeCloudChoice();
+};
+
 class PreferenceDlg : public StaticDialog
 {
 friend class NativeLangSpeaker;
@@ -261,6 +274,7 @@ private :
 	AutoCompletionDlg _autoCompletionDlg;
 	MultiInstDlg _multiInstDlg;
 	DelimiterSettingsDlg _delimiterSettingsDlg;
+	SettingsOnCloudDlg _settingsOnCloudDlg;
 };
 
 

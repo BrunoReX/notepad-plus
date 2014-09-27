@@ -36,6 +36,7 @@
 #include "documentMap.h"
 #include "functionListPanel.h"
 
+
 void Notepad_plus::macroPlayback(Macro macro)
 {
 	_pEditView->execute(SCI_BEGINUNDOACTION);
@@ -117,10 +118,13 @@ void Notepad_plus::command(int id)
 			break;
 
 		case IDM_FILE_CLOSEALL:
-			fileCloseAll();
+		{
+			bool isSnapshotMode = NppParameters::getInstance()->getNppGUI().isSnapshotMode();
+			fileCloseAll(isSnapshotMode, false);
             checkDocState();
 			break;
-
+		}
+		
 		case IDM_FILE_CLOSEALL_BUT_CURRENT :
 			fileCloseAllButCurrent();
             checkDocState();
@@ -2318,6 +2322,10 @@ void Notepad_plus::command(int id)
 		case IDM_LANG_USER :
 		{
             setLanguage(menuID2LangType(id));
+			if (_pDocMap)
+			{
+				_pDocMap->setSyntaxHiliting();
+			}
 		}
         break;
 
@@ -2372,7 +2380,8 @@ void Notepad_plus::command(int id)
 			long exStyle = ::GetWindowLongPtr(_pEditView->getHSelf(), GWL_EXSTYLE);
 			exStyle = (id == IDM_EDIT_RTL)?exStyle|WS_EX_LAYOUTRTL:exStyle&(~WS_EX_LAYOUTRTL);
 			::SetWindowLongPtr(_pEditView->getHSelf(), GWL_EXSTYLE, exStyle);
-			_pEditView->redraw();
+			BufferID buf = _pEditView->getCurrentBufferID();
+			doReload(buf, buf->isDirty());
 		}
 		break;
 

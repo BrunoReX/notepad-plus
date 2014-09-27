@@ -40,7 +40,7 @@ enum LangType {L_TEXT, L_PHP , L_C, L_CPP, L_CS, L_OBJC, L_JAVA, L_RC,\
 			   L_COFFEESCRIPT,\
 			   // The end of enumated language type, so it should be always at the end
 			   L_EXTERNAL};
-enum winVer{WV_UNKNOWN, WV_WIN32S, WV_95, WV_98, WV_ME, WV_NT, WV_W2K, WV_XP, WV_S2003, WV_XPX64, WV_VISTA, WV_WIN7, WV_WIN8};
+enum winVer{WV_UNKNOWN, WV_WIN32S, WV_95, WV_98, WV_ME, WV_NT, WV_W2K, WV_XP, WV_S2003, WV_XPX64, WV_VISTA, WV_WIN7, WV_WIN8, WV_WIN81};
 
 
 
@@ -395,6 +395,15 @@ enum winVer{WV_UNKNOWN, WV_WIN32S, WV_95, WV_98, WV_ME, WV_NT, WV_W2K, WV_XP, WV
 	// VOID NPPM_DOCSWITCHERDISABLECOLUMN(0, BOOL disableOrNot)
 	// Disable or enable extension column of doc switcher
 
+	#define NPPM_GETEDITORDEFAULTFOREGROUNDCOLOR    (NPPMSG + 90)
+	// INT NPPM_GETEDITORDEFAULTFOREGROUNDCOLOR(0, 0)
+	// Return: current editor default foreground color. You should convert the returned value in COLORREF
+
+	#define NPPM_GETEDITORDEFAULTBACKGROUNDCOLOR    (NPPMSG + 91)
+	// INT NPPM_GETEDITORDEFAULTBACKGROUNDCOLOR(0, 0)
+	// Return: current editor default background color. You should convert the returned value in COLORREF
+
+
 #define	RUNCOMMAND_USER    (WM_USER + 3000)
 	#define NPPM_GETFULLCURRENTPATH		(RUNCOMMAND_USER + FULL_CURRENT_PATH)
 	#define NPPM_GETCURRENTDIRECTORY	(RUNCOMMAND_USER + CURRENT_DIRECTORY)
@@ -522,9 +531,14 @@ enum winVer{WV_UNKNOWN, WV_WIN32S, WV_95, WV_98, WV_ME, WV_NT, WV_W2K, WV_XP, WV
 		#define DOCSTAUS_READONLY 1
 		#define DOCSTAUS_BUFFERDIRTY 2
 
-	#define NPPN_DOCORDERCHANGED (NPPN_FIRST + 16)  // To notify plugins that document order is changed
+	#define NPPN_DOCORDERCHANGED (NPPN_FIRST + 17)  // To notify plugins that document order is changed
 	//scnNotification->nmhdr.code = NPPN_DOCORDERCHANGED;
 	//scnNotification->nmhdr.hwndFrom = newIndex;
+	//scnNotification->nmhdr.idFrom = BufferID;
+
+	#define NPPN_SNAPSHOTDIRTYFILELOADED (NPPN_FIRST + 18)  // To notify plugins that a snapshot dirty file is loaded on startup
+	//scnNotification->nmhdr.code = NPPN_SNAPSHOTDIRTYFILELOADED;
+	//scnNotification->nmhdr.hwndFrom = NULL;
 	//scnNotification->nmhdr.idFrom = BufferID;
 
 #endif //NOTEPAD_PLUS_MSGS_H

@@ -103,6 +103,7 @@ enum ChangeDetect {cdDisabled=0, cdEnabled=1, cdAutoUpdate=2, cdGo2end=3, cdAuto
 enum BackupFeature {bak_none = 0, bak_simple = 1, bak_verbose = 2};
 enum OpenSaveDirSetting {dir_followCurrent = 0, dir_last = 1, dir_userDef = 2};
 enum MultiInstSetting {monoInst = 0, multiInstOnSession = 1, multiInst = 2};
+enum CloudChoice {noCloud = 0, dropbox = 1, oneDrive = 2, googleDrive = 3};
 
 const int LANG_INDEX_INSTR = 0;
 const int LANG_INDEX_INSTR2 = 1;
@@ -123,6 +124,11 @@ const int COPYDATA_FILENAMESW = 2;
 #define DECSEP_DOT      0
 #define DECSEP_COMMA    1
 #define DECSEP_BOTH     2
+
+
+#define DROPBOX_AVAILABLE 1
+#define ONEDRIVE_AVAILABLE 2
+#define GOOGLEDRIVE_AVAILABLE 4
 
 const TCHAR fontSizeStrs[][3] = {TEXT(""), TEXT("5"), TEXT("6"), TEXT("7"), TEXT("8"), TEXT("9"), TEXT("10"), TEXT("11"), TEXT("12"), TEXT("14"), TEXT("16"), TEXT("18"), TEXT("20"), TEXT("22"), TEXT("24"), TEXT("26"), TEXT("28")};
 
@@ -145,18 +151,23 @@ struct Position
 };
 
 struct sessionFileInfo : public Position {
-	sessionFileInfo(const TCHAR *fn, const TCHAR *ln, int encoding, Position pos) : _encoding(encoding), Position(pos) {
+	sessionFileInfo(const TCHAR *fn, const TCHAR *ln, int encoding, Position pos, const TCHAR *backupFilePath, int originalFileLastModifTimestamp) : 
+		_encoding(encoding), Position(pos), _originalFileLastModifTimestamp(originalFileLastModifTimestamp) {
 		if (fn) _fileName = fn;
 		if (ln)	_langName = ln;
+		if (backupFilePath) _backupFilePath = backupFilePath;
 	};
 
 	sessionFileInfo(generic_string fn) : _fileName(fn), _encoding(-1){};
 	
 	generic_string _fileName;
 	generic_string	_langName;
-	vector<size_t> marks;
+	vector<size_t> _marks;
 	vector<size_t> _foldStates;
 	int	_encoding;
+
+	generic_string _backupFilePath;
+	time_t _originalFileLastModifTimestamp;
 };
 
 struct Session {
@@ -510,11 +521,11 @@ private :
 struct NewDocDefaultSettings 
 {
 	formatType _format;
-	UniMode _encoding;
+	UniMode _unicodeMode;
 	bool _openAnsiAsUtf8;
 	LangType _lang;
 	int _codepage; // -1 when not using
-	NewDocDefaultSettings():_format(WIN_FORMAT), _encoding(uniCookie), _openAnsiAsUtf8(true), _lang(L_TEXT), _codepage(-1){};
+	NewDocDefaultSettings():_format(WIN_FORMAT), _unicodeMode(uniCookie), _openAnsiAsUtf8(true), _lang(L_TEXT), _codepage(-1){};
 };
 
 struct LangMenuItem {
@@ -704,12 +715,12 @@ struct NppGUI
 		       _tabStatus(TAB_DRAWTOPBAR | TAB_DRAWINACTIVETAB | TAB_DRAGNDROP), _splitterPos(POS_HORIZOTAL),\
 	           _userDefineDlgStatus(UDD_DOCKED), _tabSize(8), _tabReplacedBySpace(false), _fileAutoDetection(cdEnabled), _fileAutoDetectionOriginalValue(_fileAutoDetection),\
 			   _checkHistoryFiles(true) ,_enableSmartHilite(true), _disableSmartHiliteTmp(false), _enableTagsMatchHilite(true), _enableTagAttrsHilite(true), _enableHiliteNonHTMLZone(false),\
-			   _isMaximized(false), _isMinimizedToTray(false), _rememberLastSession(true), _backup(bak_none), _useDir(false), _backupDir(TEXT("")),\
+			   _isMaximized(false), _isMinimizedToTray(false), _rememberLastSession(true), _isCmdlineNosessionActivated(false), _detectEncoding(true), _backup(bak_none), _useDir(false), _backupDir(TEXT("")),\
 			   _doTaskList(true), _maitainIndent(true), _openSaveDir(dir_followCurrent), _styleMRU(true), _styleURL(0),\
-			   _autocStatus(autoc_both), _autocFromLen(1), _funcParams(false), _definedSessionExt(TEXT("")),\
+			   _autocStatus(autoc_both), _autocFromLen(1), _funcParams(false), _definedSessionExt(TEXT("")), _cloudChoice(noCloud), _availableClouds(0),\
 			   _doesExistUpdater(false), _caretBlinkRate(250), _caretWidth(1), _enableMultiSelection(false), _shortTitlebar(false), _themeName(TEXT("")), _isLangMenuCompact(false),\
 			   _smartHiliteCaseSensitive(false), _leftmostDelimiter('('), _rightmostDelimiter(')'), _delimiterSelectionOnEntireDocument(false), _multiInstSetting(monoInst),\
-			   _fileSwitcherWithoutExtColumn(false) {
+			   _fileSwitcherWithoutExtColumn(false), _isSnapshotMode(true), _snapshotBackupTiming(7000), _backSlashIsEscapeCharacterForSql(true) {
 		_appPos.left = 0;
 		_appPos.top = 0;
 		_appPos.right = 700;
@@ -747,7 +758,9 @@ struct NppGUI
 
 	bool _isMaximized;
 	bool _isMinimizedToTray;
-	bool _rememberLastSession;
+	bool _rememberLastSession;	// remember next session boolean will be written in the settings
+	bool _isCmdlineNosessionActivated; // used for if -nosession is indicated on the launch time
+	bool _detectEncoding;
 	bool _doTaskList;
 	bool _maitainIndent;
 	bool _enableSmartHilite;
@@ -759,6 +772,7 @@ struct NppGUI
 	bool _styleMRU;
 	char _leftmostDelimiter, _rightmostDelimiter;
 	bool _delimiterSelectionOnEntireDocument;
+	bool _backSlashIsEscapeCharacterForSql;
 
 
 	// 0 : do nothing
@@ -808,6 +822,11 @@ struct NppGUI
 	generic_string _themeName;
 	MultiInstSetting _multiInstSetting;
 	bool _fileSwitcherWithoutExtColumn;
+	bool isSnapshotMode() const {return _isSnapshotMode && _rememberLastSession && !_isCmdlineNosessionActivated;};
+	bool _isSnapshotMode;
+	size_t _snapshotBackupTiming;
+	CloudChoice _cloudChoice; // this option will never be read/written from/to config.xml
+	unsigned char _availableClouds; // this option will never be read/written from/to config.xml
 };
 
 struct ScintillaViewParams
@@ -1071,9 +1090,6 @@ struct FindHistory {
 	bool _isFolderFollowDoc;
 };
 
-
-#ifdef UNICODE
-
 class LocalizationSwitcher {
 friend class NppParameters;
 public :
@@ -1114,7 +1130,6 @@ private :
 	wstring _nativeLangPath;
     string _fileName;
 };
-#endif
 
 class ThemeSwitcher {
 friend class NppParameters;
@@ -1189,6 +1204,8 @@ public:
 	bool reloadLang();
 	bool reloadStylers(TCHAR *stylePath = NULL);
     void destroyInstance();
+	generic_string getCloudSettingsPath(CloudChoice cloudChoice);
+	generic_string getSettingsFolder();
 
 	bool _isTaskListRBUTTONUP_Active;
 	int L_END;
@@ -1485,16 +1502,14 @@ public:
 	FindHistory & getFindHistory() {return _findHistory;};
 	bool _isFindReplacing; // an on the fly variable for find/replace functions
 	void safeWow64EnableWow64FsRedirection(BOOL Wow64FsEnableRedirection);
-
-#ifdef UNICODE
+	
 	LocalizationSwitcher & getLocalizationSwitcher() {
 		return _localizationSwitcher;
 	};
-#endif
+
 	ThemeSwitcher & getThemeSwitcher() {
 		return _themeSwitcher;
 	};
-
 
     vector<generic_string> & getBlackList() {return _blacklist;};
     bool isInBlackList(TCHAR *fn) {
@@ -1524,6 +1539,24 @@ public:
 
 	generic_string getUserPath() const {
 		return _userPath;
+	};
+
+	void writeSettingsFilesOnCloudForThe1stTime(CloudChoice choice);
+
+	COLORREF getCurrentDefaultBgColor() const {
+		return _currentDefaultBgColor;
+	};
+
+	COLORREF getCurrentDefaultFgColor() const {
+		return _currentDefaultFgColor;
+	};
+
+	void setCurrentDefaultBgColor(COLORREF c) {
+		_currentDefaultBgColor = c;
+	};
+
+	void setCurrentDefaultFgColor(COLORREF c) {
+		_currentDefaultFgColor = c;
 	};
 
 	DPIManager _dpiManager;
@@ -1626,6 +1659,9 @@ private:
 	winVer _winVersion;
 
 	NativeLangSpeaker *_pNativeLangSpeaker;
+
+	COLORREF _currentDefaultBgColor;
+	COLORREF _currentDefaultFgColor;
 
 	static int CALLBACK EnumFontFamExProc(ENUMLOGFONTEX *lpelfe, NEWTEXTMETRICEX *, int, LPARAM lParam) {
 		vector<generic_string> *pStrVect = (vector<generic_string> *)lParam;

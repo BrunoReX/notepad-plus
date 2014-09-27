@@ -128,21 +128,20 @@ Notepad_plus::Notepad_plus(): _mainWindowStatus(0), _pDocTab(NULL), _pEditView(N
 	_linkTriggered(true), _isHotspotDblClicked(false), _isFolding(false), 
 	_sysMenuEntering(false),
 	_autoCompleteMain(&_mainEditView), _autoCompleteSub(&_subEditView), _smartHighlighter(&_findReplaceDlg),
-	_isFileOpening(false), _rememberThisSession(true), _pAnsiCharPanel(NULL), _pClipboardHistoryPanel(NULL)
+	_isFileOpening(false), _pAnsiCharPanel(NULL), _pClipboardHistoryPanel(NULL)
 {
 	ZeroMemory(&_prevSelectedRange, sizeof(_prevSelectedRange));
 
 
 	TiXmlDocumentA *nativeLangDocRootA = (NppParameters::getInstance())->getNativeLangA();
     _nativeLangSpeaker.init(nativeLangDocRootA);
-#ifdef UNICODE
+
 	LocalizationSwitcher & localizationSwitcher = (NppParameters::getInstance())->getLocalizationSwitcher();
     const char *fn = _nativeLangSpeaker.getFileName();
     if (fn)
     {
         localizationSwitcher.setFileName(fn);
     }
-#endif
 
 	(NppParameters::getInstance())->setNativeLangSpeaker(&_nativeLangSpeaker);
 
@@ -155,7 +154,8 @@ Notepad_plus::Notepad_plus(): _mainWindowStatus(0), _pDocTab(NULL), _pEditView(N
 
 	// Determine if user is administrator.
 	BOOL is_admin;
-	if(NppParameters::getInstance()->getWinVersion() >= WV_VISTA)
+	winVer ver = NppParameters::getInstance()->getWinVersion();
+	if (ver >= WV_VISTA || ver == WV_UNKNOWN)
 	{
 		SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
 		PSID AdministratorsGroup;
@@ -653,12 +653,25 @@ LRESULT Notepad_plus::init(HWND hwnd)
 		default :                        // hide & undocked
 			break;
     }
-    		// UserDefine Dialog
-	
+    
+	//
+	// Menu & toolbar for UserDefine Dialog
+	//
 	checkMenuItem(IDM_LANG_USER_DLG, uddShow);
 	_toolBar.setCheck(IDM_LANG_USER_DLG, uddShow);
 
-	//launch the plugin dlg memorized at the last session
+	//
+	// Initialize the default forground & background color
+	//
+	StyleArray & globalStyles = (NppParameters::getInstance())->getGlobalStylers();
+	int i = globalStyles.getStylerIndexByID(STYLE_DEFAULT);
+	Style & style = globalStyles.getStyler(i);
+	(NppParameters::getInstance())->setCurrentDefaultFgColor(style._fgColor);
+	(NppParameters::getInstance())->setCurrentDefaultBgColor(style._bgColor);
+
+	//
+	// launch the plugin dlg memorized at the last session
+	//
 	DockingManagerData &dmd = nppGUI._dockingData;
 
 	_dockingManager.setDockedContSize(CONT_LEFT  , nppGUI._dockingData._leftWidth);
@@ -692,8 +705,6 @@ LRESULT Notepad_plus::init(HWND hwnd)
 	loadBufferIntoView(_subEditView.getCurrentBufferID(), SUB_VIEW);
 	activateBuffer(_mainEditView.getCurrentBufferID(), MAIN_VIEW);
 	activateBuffer(_subEditView.getCurrentBufferID(), SUB_VIEW);
-	MainFileManager->increaseDocNr();	//so next doc starts at 2
-
 	::SetFocus(_mainEditView.getHSelf());
 	return TRUE;
 }
@@ -2112,7 +2123,7 @@ void Notepad_plus::setUniModeText()
 			case uni16LE_NoBOM:
 				uniModeTextString = TEXT("UCS-2 LE w/o BOM"); break;
 			case uniCookie:
-				uniModeTextString = TEXT("ANSI as UTF-8"); break;
+				uniModeTextString = TEXT("UTF-8 w/o BOM"); break;
 			default :
 				uniModeTextString = TEXT("ANSI");
 		}
@@ -2934,7 +2945,8 @@ bool Notepad_plus::canHideView(int whichOne)
 	return canHide;
 }
 
-void Notepad_plus::loadBufferIntoView(BufferID id, int whichOne, bool dontClose) {
+void Notepad_plus::loadBufferIntoView(BufferID id, int whichOne, bool dontClose)
+{
 	DocTabView * tabToOpen = (whichOne == MAIN_VIEW)?&_mainDocTab:&_subDocTab;
 	ScintillaEditView * viewToOpen = (whichOne == MAIN_VIEW)?&_mainEditView:&_subEditView;
 
@@ -2945,23 +2957,29 @@ void Notepad_plus::loadBufferIntoView(BufferID id, int whichOne, bool dontClose)
 
 	BufferID idToClose = BUFFER_INVALID;
 	//Check if the tab has a single clean buffer. Close it if so
-	if (!dontClose && tabToOpen->nbItem() == 1) {
+	if (!dontClose && tabToOpen->nbItem() == 1)
+	{
 		idToClose = tabToOpen->getBufferByIndex(0);
 		Buffer * buf = MainFileManager->getBufferByID(idToClose);
-		if (buf->isDirty() || !buf->isUntitled()) {
+		if (buf->isDirty() || !buf->isUntitled())
+		{
 			idToClose = BUFFER_INVALID;
 		}
 	}
 
 	MainFileManager->addBufferReference(id, viewToOpen);
 
-	if (idToClose != BUFFER_INVALID) {	//close clean doc. Use special logic to prevent flicker of tab showing then hiding
+	//close clean doc. Use special logic to prevent flicker of tab showing then hiding
+	if (idToClose != BUFFER_INVALID)
+	{
 		tabToOpen->setBuffer(0, id);	//index 0 since only one open
 		activateBuffer(id, whichOne);	//activate. DocTab already activated but not a problem
 		MainFileManager->closeBuffer(idToClose, viewToOpen);	//delete the buffer
 		if (_pFileSwitcherPanel)
 			_pFileSwitcherPanel->closeItem((int)idToClose, whichOne);
-	} else {
+	}
+	else
+	{
 		tabToOpen->addBuffer(id);
 	}
 }
@@ -3050,6 +3068,9 @@ int Notepad_plus::switchEditViewTo(int gid)
 	{
 		_pDocMap->initWrapMap();
 	}
+
+	// Before switching off, synchronize backup file
+	MainFileManager->backupCurrentBuffer();
 
 	notifyBufferActivated(_pEditView->getCurrentBufferID(), currentView());
 	return oldView;
@@ -3201,6 +3222,13 @@ void Notepad_plus::docGotoAnotherEditView(FileTransferMode mode)
 bool Notepad_plus::activateBuffer(BufferID id, int whichOne)
 {
 	//scnN.nmhdr.code = NPPN_DOCSWITCHINGOFF;		//superseeded by NPPN_BUFFERACTIVATED
+
+	bool isSnapshotMode = NppParameters::getInstance()->getNppGUI().isSnapshotMode();
+	if (isSnapshotMode)
+	{
+		// Before switching off, synchronize backup file
+		MainFileManager->backupCurrentBuffer();
+	}
 	Buffer * pBuf = MainFileManager->getBufferByID(id);
 	bool reload = pBuf->getNeedReload();
 	if (reload)
@@ -3526,7 +3554,10 @@ bool Notepad_plus::doBlockComment(comment_mode currCommentMode)
 		size_t linebufferSize = lineEnd - lineStart + 2;
 		TCHAR* linebuf = new TCHAR[linebufferSize];
 
-        lineIndent = _pEditView->execute(SCI_GETLINEINDENTPOSITION, i);
+		Lang *lang = _pEditView->getCurrentBuffer()->getCurrentLang();
+		bool isFortran = lang == NULL?false:lang->_langID == L_FORTRAN;
+		if (!isFortran)
+			lineIndent = _pEditView->execute(SCI_GETLINEINDENTPOSITION, i);
 		_pEditView->getGenericText(linebuf, linebufferSize, lineIndent, lineEnd);
 
         generic_string linebufStr = linebuf;
@@ -4241,7 +4272,7 @@ bool Notepad_plus::getIntegralDockingData(tTbData & dockData, int & iCont, bool 
 }
 
 
-void Notepad_plus::getCurrentOpenedFiles(Session & session)
+void Notepad_plus::getCurrentOpenedFiles(Session & session, bool includUntitledDoc)
 {
 	_mainEditView.saveCurrentPos();	//save position so itll be correct in the session
 	_subEditView.saveCurrentPos();	//both views
@@ -4250,97 +4281,54 @@ void Notepad_plus::getCurrentOpenedFiles(Session & session)
 	session._activeSubIndex = _subDocTab.getCurrentTabIndex();
 
 	//Use _invisibleEditView to temporarily open documents to retrieve markers
-	//Buffer * mainBuf = _mainEditView.getCurrentBuffer();
-	//Buffer * subBuf = _subEditView.getCurrentBuffer();
 	Document oldDoc = _invisibleEditView.execute(SCI_GETDOCPOINTER);
-	for (int i = 0, len = _mainDocTab.nbItem(); i < len ; ++i)
+	const int nbElem = 2;
+	DocTabView *docTab[nbElem];
+	docTab[0] = &_mainDocTab;
+	docTab[1] = &_subDocTab;
+	for (size_t k = 0; k < nbElem; ++k)
 	{
-		BufferID bufID = _mainDocTab.getBufferByIndex(i);
-		Buffer * buf = MainFileManager->getBufferByID(bufID);
-
-		if (!buf->isUntitled())
+		for (int i = 0, len = docTab[k]->nbItem(); i < len ; ++i)
 		{
-			// if the file doesn't exist, it could be redirected
-			// So we turn Wow64 off
-			bool isWow64Off = false;
-			NppParameters *pNppParam = NppParameters::getInstance();
-			if (!PathFileExists(buf->getFullPathName()))
-			{
-				pNppParam->safeWow64EnableWow64FsRedirection(FALSE);
-				isWow64Off = true;
-			}
+			BufferID bufID = docTab[k]->getBufferByIndex(i);
+			ScintillaEditView *editView = k == 0?&_mainEditView:&_subEditView;
+			int activeIndex = int(k == 0?session._activeMainIndex:session._activeSubIndex);
+			vector<sessionFileInfo> *viewFiles = (vector<sessionFileInfo> *)(k == 0?&(session._mainViewFiles):&(session._subViewFiles));
 
-			if (PathFileExists(buf->getFullPathName()))
-			{
-				generic_string	languageName = getLangFromMenu(buf);
-				const TCHAR *langName	= languageName.c_str();
+			Buffer * buf = MainFileManager->getBufferByID(bufID);
 
-				sessionFileInfo sfi(buf->getFullPathName(), langName, buf->getEncoding(), buf->getPosition(&_mainEditView));
+			if (buf->isUntitled() && buf->docLength() == 0)
+				continue;
 
-				//_mainEditView.activateBuffer(buf->getID());
-				_invisibleEditView.execute(SCI_SETDOCPOINTER, 0, buf->getDocument());
-				int maxLine = _invisibleEditView.execute(SCI_GETLINECOUNT);
+			if (!includUntitledDoc)
+				if (!PathFileExists(buf->getFullPathName()))
+					continue;
 
-				for (int j = 0 ; j < maxLine ; ++j)
-				{
-					if ((_invisibleEditView.execute(SCI_MARKERGET, j)&(1 << MARK_BOOKMARK)) != 0)
-					{
-						sfi.marks.push_back(j);
-					}
-				}
-
-				if (i == int(session._activeMainIndex))
-				{
-					_mainEditView.getCurrentFoldStates(sfi._foldStates);
-				}
-				else
-				{
-					sfi._foldStates = buf->getHeaderLineState(&_mainEditView);
-				}
-
-				session._mainViewFiles.push_back(sfi);
-			}
-
-			// We enable Wow64 system, if it was disabled
-			if (isWow64Off)
-			{
-				pNppParam->safeWow64EnableWow64FsRedirection(TRUE);
-				isWow64Off = false;
-			}
-		}
-	}
-
-	for (int i = 0, len = _subDocTab.nbItem(); i < len ; ++i)
-	{
-		BufferID bufID = _subDocTab.getBufferByIndex(i);
-		Buffer * buf = MainFileManager->getBufferByID(bufID);
-		if (!buf->isUntitled() && PathFileExists(buf->getFullPathName()))
-		{
-			generic_string	languageName	= getLangFromMenu( buf );
-			const TCHAR *langName	= languageName.c_str();
-
-			sessionFileInfo sfi(buf->getFullPathName(), langName, buf->getEncoding(), buf->getPosition(&_subEditView));
+			
+			generic_string	languageName = getLangFromMenu(buf);
+			const TCHAR *langName = languageName.c_str();
+			sessionFileInfo sfi(buf->getFullPathName(), langName, buf->getEncoding(), buf->getPosition(editView), buf->getBackupFileName().c_str(), int(buf->getLastModifiedTimestamp()));
 
 			_invisibleEditView.execute(SCI_SETDOCPOINTER, 0, buf->getDocument());
 			int maxLine = _invisibleEditView.execute(SCI_GETLINECOUNT);
+
 			for (int j = 0 ; j < maxLine ; ++j)
 			{
 				if ((_invisibleEditView.execute(SCI_MARKERGET, j)&(1 << MARK_BOOKMARK)) != 0)
 				{
-					sfi.marks.push_back(j);
+					sfi._marks.push_back(j);
 				}
 			}
 
-			if (i == int(session._activeSubIndex))
+			if (i == activeIndex)
 			{
-				_subEditView.getCurrentFoldStates(sfi._foldStates);
+				editView->getCurrentFoldStates(sfi._foldStates);
 			}
 			else
 			{
-				sfi._foldStates = buf->getHeaderLineState(&_subEditView);
+				sfi._foldStates = buf->getHeaderLineState(editView);
 			}
-
-			session._subViewFiles.push_back(sfi);
+			viewFiles->push_back(sfi);
 		}
 	}
 	_invisibleEditView.execute(SCI_SETDOCPOINTER, 0, oldDoc);
@@ -4503,8 +4491,9 @@ void Notepad_plus::notifyBufferChanged(Buffer * buffer, int mask)
 				if (doCloseOrNot(buffer->getFullPathName()) == IDNO)
 				{
 					//close in both views, doing current view last since that has to remain opened
-					doClose(buffer->getID(), otherView());
-					doClose(buffer->getID(), currentView());
+					bool isSnapshotMode = nppGUI.isSnapshotMode();
+					doClose(buffer->getID(), otherView(), isSnapshotMode);
+					doClose(buffer->getID(), currentView(), isSnapshotMode);
 				}
 				break;
 			}
@@ -4644,7 +4633,7 @@ void Notepad_plus::notifyBufferActivated(BufferID bufid, int view)
 	if (_pDocMap && (!_pDocMap->isClosed()) && _pDocMap->isVisible())
 	{
 		_pDocMap->reloadMap();
-		_pDocMap->setSyntaxLiliting();
+		_pDocMap->setSyntaxHiliting();
 	}
 
 	if (_pFuncList && (!_pFuncList->isClosed()) && _pFuncList->isVisible())
@@ -4684,6 +4673,8 @@ void Notepad_plus::loadCommandlineParams(const TCHAR * commandLine, CmdLineParam
 	for (int i = 0, len = fnss.size(); i < len ; ++i)
 	{
 		pFn = fnss.getFileName(i);
+		if (!pFn) return;
+
 		BufferID bufID = doOpen(pFn, recursive, readOnly);
 		if (bufID == BUFFER_INVALID)	//cannot open file
 			continue;
@@ -5052,7 +5043,14 @@ void Notepad_plus::launchClipboardHistoryPanel()
 			data.pszName = title;
 		}
 		::SendMessage(_pPublicInterface->getHSelf(), NPPM_DMMREGASDCKDLG, 0, (LPARAM)&data);
+
+		COLORREF fgColor = (NppParameters::getInstance())->getCurrentDefaultFgColor();
+		COLORREF bgColor = (NppParameters::getInstance())->getCurrentDefaultBgColor();
+
+		_pClipboardHistoryPanel->setBackgroundColor(bgColor);
+		_pClipboardHistoryPanel->setForegroundColor(fgColor);
 	}
+
 	_pClipboardHistoryPanel->display();
 }
 
@@ -5087,6 +5085,12 @@ void Notepad_plus::launchFileSwitcherPanel()
 			data.pszName = title;
 		}
 		::SendMessage(_pPublicInterface->getHSelf(), NPPM_DMMREGASDCKDLG, 0, (LPARAM)&data);
+		
+		COLORREF fgColor = (NppParameters::getInstance())->getCurrentDefaultFgColor();
+		COLORREF bgColor = (NppParameters::getInstance())->getCurrentDefaultBgColor();
+
+		_pFileSwitcherPanel->setBackgroundColor(bgColor);
+		_pFileSwitcherPanel->setForegroundColor(fgColor);
 	}
 	_pFileSwitcherPanel->display();
 }
@@ -5122,7 +5126,14 @@ void Notepad_plus::launchAnsiCharPanel()
 			data.pszName = title;
 		}
 		::SendMessage(_pPublicInterface->getHSelf(), NPPM_DMMREGASDCKDLG, 0, (LPARAM)&data);
+		
+		COLORREF fgColor = (NppParameters::getInstance())->getCurrentDefaultFgColor();
+		COLORREF bgColor = (NppParameters::getInstance())->getCurrentDefaultBgColor();
+
+		_pAnsiCharPanel->setBackgroundColor(bgColor);
+		_pAnsiCharPanel->setForegroundColor(fgColor);
 	}
+
 	_pAnsiCharPanel->display();
 }
 
@@ -5162,6 +5173,12 @@ void Notepad_plus::launchProjectPanel(int cmdID, ProjectPanel ** pProjPanel, int
 			data.pszName = title;
 		}
 		::SendMessage(_pPublicInterface->getHSelf(), NPPM_DMMREGASDCKDLG, 0, (LPARAM)&data);
+
+		COLORREF fgColor = (NppParameters::getInstance())->getCurrentDefaultFgColor();
+		COLORREF bgColor = (NppParameters::getInstance())->getCurrentDefaultBgColor();
+
+		(*pProjPanel)->setBackgroundColor(bgColor);
+		(*pProjPanel)->setForegroundColor(fgColor);
 	}
 	(*pProjPanel)->display();
 }
@@ -5243,9 +5260,16 @@ void Notepad_plus::launchFunctionList()
 		}
 
 		::SendMessage(_pPublicInterface->getHSelf(), NPPM_DMMREGASDCKDLG, 0, (LPARAM)&data);
+		COLORREF fgColor = (NppParameters::getInstance())->getCurrentDefaultFgColor();
+		COLORREF bgColor = (NppParameters::getInstance())->getCurrentDefaultBgColor();
+
+		_pFuncList->setBackgroundColor(bgColor);
+		_pFuncList->setForegroundColor(fgColor);
 	}
+	
 	_pFuncList->display();
 	_pFuncList->reload();
+
 	_pEditView->getFocus();
 }
 
@@ -5269,7 +5293,7 @@ struct Quote{
 	const char *_quote;
 };
 
-const int nbQuote = 194;
+const int nbQuote = 197;
 Quote quotes[nbQuote] = {
 {"Notepad++", "Good programmers use Notepad++ to code.\nExtreme programmers use MS Word to code, in Comic Sans, center aligned."},
 {"Martin Golding", "Always code as if the guy who ends up maintaining your code will be a violent psychopath who knows where you live."},
@@ -5299,6 +5323,7 @@ Quote quotes[nbQuote] = {
 {"Darth Vader", "You don't get to 500 million star systems without making a few enemies."},
 {"Doug Linder", "A good programmer is someone who always looks both ways before crossing a one-way street."},
 {"Jean-Claude van Damme", "A cookie has no soul, it's just a cookie. But before it was milk and eggs.\nAnd in eggs there's the potential for life."},
+{"Michael Feldman", "Java is, in many ways, C++–."},
 {"Don Ho", "Je mange donc je chie."},
 {"Don Ho #2", "RTFM is the true path of every developer.\nBut it would happen only if there's no way out."},
 {"Don Ho #3", "Smartphone is the best invention of 21st century for avoiding the eyes contact while crossing people you know on the street."},
@@ -5309,35 +5334,35 @@ Quote quotes[nbQuote] = {
 {"Anonymous #5", "\"SEX\" is not the answer.\nSex is the question, \"YES\" is the answer."},
 {"Anonymous #6", "Going to Mc Donald's for a salad is like going to a whore for a hug."},
 {"Anonymous #7", "I need a six month holiday, TWICE A YEAR!"},
-{"Anonymous #8", "A world without woman would be a pain in the ass!!!"},
+{"Anonymous #8", "Everything is a knife if you're strong enough."},
 {"Anonymous #9", "I just read a list of \"the 100 things to do before you die\". I'm pretty surprised \"yell for help\" wasn't one of them..."},
 {"Anonymous #10", "Roses are red,\nViolets are red,\nTulips are red,\nBushes are red,\nTrees are red,\nHOLY SHIT MY\nGARDEN'S ON FIRE!!"},
 {"Anonymous #11", "We stopped checking for monsters under our bed, when we realized they were inside us."},
 {"Anonymous #12", "I would rather check my facebook than face my checkbook."},
 {"Anonymous #13", "Whoever says Paper beats Rock is an idiot. Next time I see someone say that I will throw a rock at them while they hold up a sheet of paper."},
 {"Anonymous #14", "A better world is where chickens can cross the road without having their motives questioned."},
-{"Anonymous #15", "Life is like a penis, simple, soft, straight, relaxed and hanging freely.\nThen women make it hard."},
+{"Anonymous #15", "If I didn't drink, how would my friends know I love them at 2 AM?"},
 {"Anonymous #16", "What you do after sex?\n  A. Smoke a cigarette\n  B. Kiss your partener\n  C. Clear browser history\n"},
 {"Anonymous #17", "All you need is love,\nall you want is sex,\nall you have is porn.\n"},
 {"Anonymous #18", "Never get into fights with ugly people, they have nothing to lose."},
 {"Anonymous #19", "F_CK: All I need is U."},
-{"Anonymous #20", "Never make eye contact when eating a banana."},
+{"Anonymous #20", "Never make eye contact while eating a banana."},
 {"Anonymous #21", "I love my sixpack so much, I protect it with a layer of fat."},
 {"Anonymous #22", "\"It's impossible.\" said pride.\n\"It's risky.\" said experience.\n\"It's pointless.\" said reason.\n\"Give it a try.\" whispered the heart.\n...\n\"What the hell was that?!?!?!?!?!\" shouted the anus two minutes later."},
 {"Anonymous #23", "Everybody talks about leaving a better planet for the children.\nWhy nobody tries to leave better children to the planet?"},
-{"Anonymous #24", "I'm not saying I hate her.\nI just hope she gets fingered by wolverine"},
+//{"Anonymous #24", ""},
 {"Anonymous #25", "In a way, I feel sorry for the kids of this generation.\nThey'll have parents who know how to check browser history."},
 {"Anonymous #26", "I would never bungee jump.\nI came into this world because of a broken rubber, and I'm not going out cause of one."},
-{"Anonymous #27", "I'm no gynecologist, but I know a cunt when I see one."},
+//{"Anonymous #27", ""},
 {"Anonymous #28", "Why 6 afraid of 7?\nBecause 7 8 9 (seven ate nine) while 6 and 9 were flirting."},
-{"Anonymous #29", "The reason women will never be the ones to propose is\nbecause as soon as she gets on her knees,\nhe will start unzipping."},
+//{"Anonymous #29", ""},
 {"Anonymous #30", "Why do Java developers wear glasses?\nBecause they don't C#."},
-{"Anonymous #31", "Non alcoholic beer is like licking your sister.\nIt tastes right but it is wrong."},
+{"Anonymous #31", "A baby's laughter is one of the most beautiful sounds you will ever hear. Unless it's 3 AM. And you're home alone. And you don't have a baby."},
 {"Anonymous #32", "Two bytes meet. The first byte asks, \"You look terrible. Are you OK?\"\nThe second byte replies, \"No, just feeling a bit off.\""},
 {"Anonymous #33", "Programmer - an organism that turns coffee into software."},
 {"Anonymous #34", "It's not a bug - it's an undocumented feature."},
 {"Anonymous #35", "Should array index start at 0 or 1?\nMy compromised solution is 0.5"},
-{"Anonymous #36", "Every single time when I'm about to hug someone extremely sexy, I hit the miror."},
+{"Anonymous #36", "Every single time when I'm about to hug someone extremely sexy, I hit the mirror."},
 {"Anonymous #37", "My software never has bugs. It just develops random features."},
 {"Anonymous #38", "LISP = Lots of Irritating Silly Parentheses."},
 {"Anonymous #39", "Perl, the only language that looks the same before and after RSA encryption."},
@@ -5347,7 +5372,7 @@ Quote quotes[nbQuote] = {
 {"Anonymous #43", "Afraid to die alone?\nBecome a bus driver."},
 {"Anonymous #44", "The first 5 days after the weekend are always the hardest."},
 {"Anonymous #45", "Rhinos are just fat unicorns."},
-{"Anonymous #46", "Pornography harms\nmy wrist."},
+{"Anonymous #46", "Today, I asked a girl out. She replied, \"Sorry, I'm suddenly a lesbian.\" FML"},
 {"Anonymous #47", "Kids are like fart.\nYou can only stand yours."},
 {"Anonymous #48", "If you were born in Israel, you'd probably be Jewish.\nIf you were born in Saudi Arabia, you'd probably be Muslim.\nIf you were born in India, you'd probably be Hindu.\nBut because you were born in North America, you're Christian.\nYour faith is not inspired by some divine, constant truth.\nIt's simply geography."},
 {"Anonymous #49", "There are 2 types of people in this world:\nPeople who say they pee in the shower, and the dirty fucking liars."},
@@ -5360,11 +5385,10 @@ Quote quotes[nbQuote] = {
 {"Anonymous #56", "Religion is like circumcision.\nIf you wait until someone is 21 to tell them about it they probably won't be interested."},
 {"Anonymous #57", "No, no, no, I'm not insulting you.\nI'm describing you."},
 {"Anonymous #58", "I bought a dog once. Named him \"Stay\".\n\"Come here, Stay.\"\nHe's insane now."},
-{"Anonymous #59", "Steve Jobs\n1955-2011\nDied from PC (Pancreatic Cancer)."},
 {"Anonymous #60", "Yesterday I named my Wifi network \"hack me if you can\"\nToday when I woke up it was changed to \"challenge accepted\"."},
 {"Anonymous #61", "Your mother is so fat,\nthe recursive function computing her mass causes a stack overflow."},
 {"Anonymous #62", "Oral sex makes my day, but anal sex makes my hole weak."},
-{"Anonymous #63", "I'm not saying I am Batman, I am just saying no one has ever seen me and Batman in the same room togather."},
+{"Anonymous #63", "I'm not saying I am Batman, I am just saying no one has ever seen me and Batman in the same room together."},
 {"Anonymous #64", "I took a taxi today.\nThe driver told me \"I love my job, I own this car, I've got my own business, I'm my own boss, NO ONE tells me what to do!\"\nI said \"TURN LEFT HERE\".\n"},
 {"Anonymous #65", "A man without God is like a fish without a bicycle."},
 {"Anonymous #66", "I hate how spiders just sit there on the walls and act like they pay rent!"},
@@ -5381,22 +5405,22 @@ Quote quotes[nbQuote] = {
 {"Anonymous #77", "Governments are like diapers.\nThey should be changed often, and for the same reason."},
 {"Anonymous #78", "If you expect the world to be fair with you because you are fair, you're fooling yourself.\nThat's like expecting the lion not to eat you because you didn't eat him."},
 {"Anonymous #79", "I'm a creationist.\nI believe man create God."},
-{"Anonymous #80", "If women ruled the world, there would be no wars.\nJust a bunch of jealous countries not talking to each other."},
+{"Anonymous #80", "Let's eat kids.\nLet's eat, kids.\n\nUse a comma.\nSave lives."},
 {"Anonymous #81", "A male engineering student was crossing a road one day when a frog called out to him and said, \"If you kiss me, I'll turn into a beautiful princess.\" He bent over, picked up the frog, and put it in his pocket.\n\nThe frog spoke up again and said, \"If you kiss me and turn me back into a beautiful princess, I will stay with you for one week.\" The engineering student took the frog out of his pocket, smiled at it; and returned it to his pocket.\n\nThe frog then cried out, \"If you kiss me and turn me back into a princess, I'll stay with you and do ANYTHING you want.\" Again the boy took the frog out, smiled at it, and put it back into his pocket.\n\nFinally, the frog asked, \"What is the matter? I've told you I'm a beautiful princess, that I'll stay with you for a week and do anything you want. Why won't you kiss me?\" The boy said, \"Look I'm an engineer. I don't have time for a girlfriend, but a talking frog is cool.\"\n"},
-{"Anonymous #82", "Every guy thinks that every girl's dream is to find the perfect guy.\nBullshit!\nEvery girl's dream is to eat without getting fat!"},
+//{"Anonymous #82", ""},
 {"Anonymous #83", "Copy from one, it's plagiarism.\nCopy from two, it's research."},
-{"Anonymous #84", "If you love something, let it go. If it comes back to you, its yours forever.\nIf it doesn't, you hunt that bitch down and kill her."},
+//{"Anonymous #84", ""},
 {"Anonymous #85", "Race, religion, ethnic pride and nationalism etc... does nothing but teach you how to hate people that you've never met."},
 {"Anonymous #86", "Farts are just the ghosts of the things we eat."},
 {"Anonymous #87", "I promised I would never kill someone who had my blood.\nBut that mosquito made me break my word."},
-{"Anonymous #88", "Frigide, ton cul doit etre jaloux de la merde qui sort de ta bouche."},
+//{"Anonymous #88", ""},
 {"Anonymous #89", "I'm drunk and you're still ugly."},
 {"Anonymous #90", "Clapping:\n(verb)\nRepeatedly high-fiving yourself for someone else's accomplishments."},
 {"Anonymous #91", "CV: ctrl-C, ctrl-V"},
 {"Anonymous #92", "Mondays are not so bad.\nIt's your job that sucks."},
 {"Anonymous #93", "[In a job interview]\nInterviewer: What's your greatest weakness?\nCandidate: Honesty.\nInterviewer: I don't think honesty is a weakness.\nCandidate: I don't give a fuck what you think."},
 {"Anonymous #94", "Hey, I just met you\nAnd this is crazy\nHere's my number 127.0.0.1\nPing me maybe?"},
-{"Anonymous #95", "YES!\nI'm a programmer, and\nNO!\nIt doesn't mean that I have to fix you PC!"},
+{"Anonymous #95", "YES!\nI'm a programmer, and\nNO!\nIt doesn't mean that I have to fix your PC!"},
 {"Anonymous #96", "Code for 6 minutes, debug for 6 hours."},
 {"Anonymous #97", "Real Programmers don't comment their code.\nIf it was hard to write, it should be hard to read."},
 {"Anonymous #98", "My neighbours listen to good music.\nWhether they like it or not."},
@@ -5406,11 +5430,11 @@ Quote quotes[nbQuote] = {
 {"Anonymous #102", "If IE is brave enough to ask you to set it as your default browser,\ndon't tell me you dare not ask a girl out."},
 {"Anonymous #103", "Turn on your brain, turn off TV."},
 {"Anonymous #104", "The main idea of \"Inception\":\nif you run a VM inside a VM inside a VM inside a VM inside a VM,\neverything will be very slow."},
-{"Anonymous #105", "\"Kiss my ass fucker\" really needs a comma."},
+//{"Anonymous #105", ""},
 {"Anonymous #106", "When I die, I want to go peacefully like my grandfather did, in his sleep\n- not screaming, like the passengers in his car."},
 {"Anonymous #107", "Remember, YOUR God is real.\nAll those other Gods are ridiculous, made-up nonsense.\nBut not yours.\nYour God is real. Whichever one that is."},
 {"Anonymous #108", "I hope Bruce Willis dies of a Viagra overdose,\nThe way you can see the headline:\nBruce Willis, Died Hard"},
-{"Anonymous #109", "If you ever wanna know what a woman's mind feels like?\nImagine a browser with 2857 tabs open, all the time."},
+//{"Anonymous #109", ""},
 {"Anonymous #110", "A programmer had a problem, so he decided to use threads.\nNow 2 has. He problems."},
 {"Anonymous #111", "I love how the internet has improved people's grammar far more than any English teacher has.\nIf you write \"your\" instead of \"you're\" in English class, all you get is a red mark.\nMess up on the internet, and may God have mercy on your soul."},
 {"Anonymous #112", "#hulk {\n    height: 200%;\n    width: 200%;\n    color: green;\n}"},
@@ -5425,12 +5449,12 @@ Quote quotes[nbQuote] = {
 {"Anonymous #121", "Thing to do today:\n1. Get up\n2. Go back to bed"},
 {"Anonymous #122", "Nerd?\nI prefer the term \"Intellectual badass\"."},
 {"Anonymous #123", "How can you face your problem if your problem is your face?"},
-//{"Anonymous #124", ""},
+{"Anonymous #124", "You don't need religion to have morals.\nIf you can't determine right from wrong then you lack empathy, not religion."},
 {"Anonymous #125", "Pooping with the door opened is the meaning of true freedom."},
 {"Anonymous #126", "Social media does not make people stupid.\nIt just makes stupid people more visible."},
 {"Anonymous #127", "Don't give up your dreams.\nKeep sleeping."},
 {"Anonymous #128", "I love sleep.\nNot because I'm lazy.\nBut because my dreams are better than my real life."},
-{"Anonymous #129", "Without nipples, tits are pointless."},
+//{"Anonymous #129", ""},
 {"Anonymous #130", "Common sense is so rare, it's kinda like a superpower..."},
 {"Anonymous #131", "The best thing about a boolean is even if you are wrong, you are only off by a bit."},
 {"Anonymous #132", "Benchmarks don't lie, but liars do benchmarks."},
@@ -5445,6 +5469,19 @@ Quote quotes[nbQuote] = {
 {"Anonymous #141", "To most religious people, the holy books are like a software license (EULA).\nNobody actually reads it. They just scroll to the bottom and click \"I agree\"."},
 {"Anonymous #142", "You are nothing but a number of days,\nwhenever each day passes then part of you has gone."},
 {"Anonymous #143", "If 666 is evil, does that make 25.8069758011 the root of all evil?"},
+{"Anonymous #144", "I don't want to sound like a badass but...\nI eject my USB drive without removing it safely."},
+{"Anonymous #145", "feet  (noun)\na device used for finding legos in the dark"},
+{"Anonymous #146", "Buy a sheep\nName it \"Relation\"\nNow you have a Relationsheep\n"},
+//{"Anonymous #147", ""},
+{"Anonymous #148", "UNIX command line Russian roulette:\n[ $[ $RANDOM % 6 ] == 0 ] && rm -rf /* || echo *Click*"},
+{"Anonymous #149", "unzip, strip, top, less, touch, finger, grep, mount, fsck, more, yes, fsck, fsck, fsck, umount, sleep.\n\nNo, it's not porn. It's Unix."},
+{"Anonymous #150", "To understand what recursion is, you must first understand recursion."},
+{"Anonymous #151", "Q: What's the object-oriented way to become wealthy?\nA: Inheritance."},
+{"Anonymous #152", "A SQL query goes into a bar, walks up to two tables and asks, \"Can I join you?\""},
+{"Anonymous #153", "You are not fat, you are just more visible."},
+{"Anonymous #154", "Minimalist\n (.   .)\n  )   (\n (  Y  )\nASCII Art"},
+{"Louis C.K.", "I'm a good citizen. I'm a good father. I recycle and I masturbate."},
+{"Mary Oliver", "Someone I loved once gave me a box full of darkness.\nIt took me years to understand that this, too, was a gift."},
 {"Floor", "If you fall, I will be there."},
 {"Simon Amstell", "If you have some problem in your life and need to deal with it, then use religion, that's fine.\nI use Google."},
 {"James Bond", "James, James Bond."},
@@ -5459,11 +5496,10 @@ Quote quotes[nbQuote] = {
 {"Gandhi", "Earth provides enough to satisfy every man's need, but not every man's greed."},
 {"R. D. Laing", "Life is a sexually transmitted disease and the mortality rate is one hundred percent."},
 {"Apple fan boy", "I'll buy a second iPhone 5 and buy a lot of iOS applications so that Apple will be able to buy Samsung (this shitty company)\nto shut it down and all the Apple haters will be forced to have an iPhone. Muhahaha..."},
-{"Motherf*cker", "Thousands of my potential children died on your mother's face last night."},
 {"Hustle Man", "Politicians are like sperm.\nOne in a million turn out to be an actual human being."},
-{"Confucius", "It's good to meet girl in park.\nBut better to park meat in girl."},
 {"Mark Twain", "Censorship is telling a man he can't have a steak just because a baby can't chew it."},
 {"Friedrich Nietzsche", "There is not enough love and goodness in the world to permit giving any of it away to imaginary beings."},
+{"Dhalsim", "Pain is a state of mind and I don't mind your pain."},
 {"Elie Wiesel", "Human beings can be beautiful or more beautiful,\nthey can be fat or skinny, they can be right or wrong,\nbut illegal? How can a human being be illegal?"},
 {"Chewbacca", "Uuuuuuuuuur Ahhhhrrrrrr\nUhrrrr Ahhhhrrrrrr\nAaaarhg..."}
 };
@@ -5590,7 +5626,7 @@ DWORD WINAPI Notepad_plus::threadTextPlayer(void *params)
 	//writeLog(TEXT("c:\\tmp\\log.txt"), "\n\n\n\n");
 	const char * quoter = ((TextPlayerParams *)params)->_quoter;
 	string quoter_str = quoter;
-	int pos = quoter_str.find("Anonymous");
+	size_t pos = quoter_str.find("Anonymous");
 	if (pos == string::npos)
 	{
 		::SendMessage(curScintilla, SCI_APPENDTEXT, 3, (LPARAM)"\n- ");
@@ -5760,26 +5796,7 @@ int Notepad_plus::getQuoteIndexFrom(const char *quoter) const
 
 void Notepad_plus::showAllQuotes() const
 {
-	/*
-	HANDLE mutex = ::CreateMutex(NULL, false, TEXT("nppTextWriter"));
-	for (int i = 0; i < nbQuote; i++)
-	{
-		static bool firstTime = true;
-		if (firstTime)
-		{
-			firstTime = false;
-		}
-		else
-		{
-			WaitForSingleObject(mutex, INFINITE);
-		
-		}
-		ReleaseMutex(mutex);
-		Sleep(1000);
-		showQuoteFromIndex(i);
-		WaitForSingleObject(mutex, INFINITE);
-	}
-	*/
+
 }
 
 void Notepad_plus::showQuoteFromIndex(int index) const
@@ -5797,6 +5814,31 @@ void Notepad_plus::showQuoteFromIndex(int index) const
     ::CloseHandle(hThread);
 }
 
+void Notepad_plus::launchDocumentBackupTask()
+{
+	HANDLE hThread = ::CreateThread(NULL, 0, backupDocument, NULL, 0, NULL);
+    ::CloseHandle(hThread);
+}
+
+DWORD WINAPI Notepad_plus::backupDocument(void * /*param*/)
+{
+	bool isSnapshotMode = true;
+	while (isSnapshotMode)
+	{
+		size_t timer = NppParameters::getInstance()->getNppGUI()._snapshotBackupTiming;
+		if (timer < 1000)
+			timer = 1000;
+
+		::Sleep(timer);
+
+		isSnapshotMode = NppParameters::getInstance()->getNppGUI().isSnapshotMode();
+		if (!isSnapshotMode)
+			break;
+
+		MainFileManager->backupCurrentBuffer();
+	}
+	return TRUE;
+}
 
 #pragma warning( disable : 4127 )
 //--FLS: undoStreamComment: New function to undo stream comment around or within selection end-points.

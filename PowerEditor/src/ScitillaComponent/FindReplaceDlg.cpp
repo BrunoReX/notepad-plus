@@ -228,7 +228,8 @@ void FindReplaceDlg::create(int dialogID, bool isRTL)
 	//::GetWindowRect(_hSelf, &rect);
 	getClientRect(rect);
 	_tab.init(_hInst, _hSelf, false, false, true);
-	_tab.setFont(TEXT("Tahoma"), 13);
+	int tabDpiDynamicalHeight = NppParameters::getInstance()->_dpiManager.scaleY(13);
+	_tab.setFont(TEXT("Tahoma"), tabDpiDynamicalHeight);
 	
 	const TCHAR *find = TEXT("Find");
 	const TCHAR *replace = TEXT("Replace");
@@ -1830,7 +1831,11 @@ void FindReplaceDlg::findAllIn(InWhat op)
 			focusOnFinder();
 		}
 		else
+		{
+			// Show finder
+			::SendMessage(_hParent, NPPM_DMMSHOW, 0, (LPARAM)_pFinder->getHSelf());
 			getFocus(); // no hits
+		}
 	}
 	else // error - search folder doesn't exist
 		::SendMessage(_hSelf, WM_NEXTDLGCTL, (WPARAM)::GetDlgItem(_hSelf, IDD_FINDINFILES_DIR_COMBO), TRUE);
@@ -2523,8 +2528,19 @@ void Finder::setFinderStyle()
 			_scintView.execute(SCI_SETCARETLINEBACK, style._bgColor);
 		}
 	}
-
 	_scintView.setSearchResultLexer();
+	
+	// Override foreground & background colour by default foreground & background coulour
+	StyleArray & stylers = _scintView._pParameter->getMiscStylerArray();
+    int iStyleDefault = stylers.getStylerIndexByID(STYLE_DEFAULT);
+    if (iStyleDefault != -1)
+    {
+        Style & styleDefault = stylers.getStyler(iStyleDefault);
+	    _scintView.setStyle(styleDefault);
+		_scintView.execute(SCI_STYLESETFORE, SCE_SEARCHRESULT_DEFAULT, styleDefault._fgColor);
+		_scintView.execute(SCI_STYLESETBACK, SCE_SEARCHRESULT_DEFAULT, styleDefault._bgColor);
+    }
+
 	_scintView.execute(SCI_COLOURISE, 0, -1);
 }
 
@@ -2728,10 +2744,11 @@ BOOL CALLBACK FindIncrementDlg::run_dlgProc(UINT message, WPARAM wParam, LPARAM)
 							_pFRDlg->processFindNext(str2Search.c_str(), &fo, &findStatus);
 							setFindStatus(findStatus);
 						}
-					return TRUE;
-					case EN_KILLFOCUS :
-					case EN_SETFOCUS :
-						break;
+						return TRUE;
+
+						case EN_KILLFOCUS :
+						case EN_SETFOCUS :
+							break;
 					}
 				}
 				return TRUE;

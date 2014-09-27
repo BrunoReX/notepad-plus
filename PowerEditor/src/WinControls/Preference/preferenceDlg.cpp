@@ -139,6 +139,10 @@ BOOL CALLBACK PreferenceDlg::run_dlgProc(UINT Message, WPARAM wParam, LPARAM lPa
 			_delimiterSettingsDlg.init(_hInst, _hSelf);
 			_delimiterSettingsDlg.create(IDD_PREFERENCE_DELIMITERSETTINGS_BOX, false, false);
 
+			_settingsOnCloudDlg.init(_hInst, _hSelf);
+			_settingsOnCloudDlg.create(IDD_PREFERENCE_SETTINGSONCLOUD_BOX, false, false);
+
+
 			_wVector.push_back(DlgInfo(&_barsDlg, TEXT("General"), TEXT("Global")));
 			_wVector.push_back(DlgInfo(&_marginsDlg, TEXT("Editing"), TEXT("Scintillas")));
 			_wVector.push_back(DlgInfo(&_defaultNewDocDlg, TEXT("New Document"), TEXT("NewDoc")));
@@ -152,6 +156,7 @@ BOOL CALLBACK PreferenceDlg::run_dlgProc(UINT Message, WPARAM wParam, LPARAM lPa
 			_wVector.push_back(DlgInfo(&_autoCompletionDlg, TEXT("Auto-Completion"), TEXT("AutoCompletion")));
 			_wVector.push_back(DlgInfo(&_multiInstDlg, TEXT("Multi-Instance"), TEXT("MultiInstance")));
 			_wVector.push_back(DlgInfo(&_delimiterSettingsDlg, TEXT("Delimiter"), TEXT("Delimiter")));
+			_wVector.push_back(DlgInfo(&_settingsOnCloudDlg, TEXT("Cloud"), TEXT("Cloud")));
 			_wVector.push_back(DlgInfo(&_settingsDlg, TEXT("MISC."), TEXT("MISC")));
 
 
@@ -177,6 +182,7 @@ BOOL CALLBACK PreferenceDlg::run_dlgProc(UINT Message, WPARAM wParam, LPARAM lPa
 			_autoCompletionDlg.reSizeTo(rc);
 			_multiInstDlg.reSizeTo(rc);
 			_delimiterSettingsDlg.reSizeTo(rc);
+			_settingsOnCloudDlg.reSizeTo(rc);
 
 			NppParameters *pNppParam = NppParameters::getInstance();
 			ETDTProc enableDlgTheme = (ETDTProc)pNppParam->getEnableThemeDlgTexture();
@@ -828,8 +834,9 @@ BOOL CALLBACK SettingsDlg::run_dlgProc(UINT Message, WPARAM wParam, LPARAM)
 			}
 
 			::SendDlgItemMessage(_hSelf, IDC_CHECK_MIN2SYSTRAY, BM_SETCHECK, nppGUI._isMinimizedToTray, 0);
-			::SendDlgItemMessage(_hSelf, IDC_CHECK_REMEMBERSESSION, BM_SETCHECK, nppGUI._rememberLastSession, 0);
+			::SendDlgItemMessage(_hSelf, IDC_CHECK_DETECTENCODING, BM_SETCHECK, nppGUI._detectEncoding, 0);
             ::SendDlgItemMessage(_hSelf, IDC_CHECK_AUTOUPDATE, BM_SETCHECK, nppGUI._autoUpdateOpt._doAutoUpdate, 0);
+			::SendDlgItemMessage(_hSelf, IDC_CHECK_BACKSLASHISESCAPECHARACTERFORSQL, BM_SETCHECK, nppGUI._backSlashIsEscapeCharacterForSql, 0);
 
 			::ShowWindow(::GetDlgItem(_hSelf, IDC_CHECK_AUTOUPDATE), nppGUI._doesExistUpdater?SW_SHOW:SW_HIDE);
 			
@@ -958,10 +965,9 @@ BOOL CALLBACK SettingsDlg::run_dlgProc(UINT Message, WPARAM wParam, LPARAM)
 					nppGUI._isMinimizedToTray = isCheckedOrNot(wParam);
 					return TRUE;
 
-				case IDC_CHECK_REMEMBERSESSION:
-					nppGUI._rememberLastSession = isCheckedOrNot(wParam);
+				case IDC_CHECK_DETECTENCODING:
+					nppGUI._detectEncoding = isCheckedOrNot(wParam);
 					return TRUE;
-
 				case IDC_CHECK_ENABLEDOCSWITCHER :
 				{
 					nppGUI._doTaskList = !nppGUI._doTaskList;
@@ -1050,6 +1056,12 @@ BOOL CALLBACK SettingsDlg::run_dlgProc(UINT Message, WPARAM wParam, LPARAM)
 					::SendMessage(grandParent, NPPM_INTERNAL_UPDATETITLEBAR, 0, 0);
 					return TRUE;
 				}
+
+				case IDC_CHECK_BACKSLASHISESCAPECHARACTERFORSQL :
+				{
+					nppGUI._backSlashIsEscapeCharacterForSql = isCheckedOrNot(IDC_CHECK_BACKSLASHISESCAPECHARACTERFORSQL);
+					return TRUE;
+				}
 			}
 		}
 	}
@@ -1090,7 +1102,7 @@ BOOL CALLBACK DefaultNewDocDlg::run_dlgProc(UINT Message, WPARAM wParam, LPARAM)
 			}
 			::SendDlgItemMessage(_hSelf, ID2Check, BM_SETCHECK, BST_CHECKED, 0);
 
-			switch (ndds._encoding)
+			switch (ndds._unicodeMode)
 			{
 				case uni16BE :
 					ID2Check = IDC_RADIO_UCS2BIG;
@@ -1173,34 +1185,34 @@ BOOL CALLBACK DefaultNewDocDlg::run_dlgProc(UINT Message, WPARAM wParam, LPARAM)
 			switch (wParam)
 			{
 				case IDC_RADIO_UCS2BIG:
-					ndds._encoding = uni16BE;
+					ndds._unicodeMode = uni16BE;
 					ndds._openAnsiAsUtf8 = false;
 					makeOpenAnsiAsUtf8(false);
 					ndds._codepage = -1;
 					::EnableWindow(::GetDlgItem(_hSelf, IDC_COMBO_OTHERCP), false);
 					return TRUE;
 				case IDC_RADIO_UCS2SMALL:
-					ndds._encoding = uni16LE;
+					ndds._unicodeMode = uni16LE;
 					ndds._openAnsiAsUtf8 = false;
 					makeOpenAnsiAsUtf8(false);
 					ndds._codepage = -1;
 					::EnableWindow(::GetDlgItem(_hSelf, IDC_COMBO_OTHERCP), false);
 					return TRUE;
 				case IDC_RADIO_UTF8:
-					ndds._encoding = uniUTF8;
+					ndds._unicodeMode = uniUTF8;
 					ndds._openAnsiAsUtf8 = false;
 					makeOpenAnsiAsUtf8(false);
 					ndds._codepage = -1;
 					::EnableWindow(::GetDlgItem(_hSelf, IDC_COMBO_OTHERCP), false);
 					return TRUE;
 				case IDC_RADIO_UTF8SANSBOM:
-					ndds._encoding = uniCookie;
+					ndds._unicodeMode = uniCookie;
 					makeOpenAnsiAsUtf8(true);
 					ndds._codepage = -1;
 					::EnableWindow(::GetDlgItem(_hSelf, IDC_COMBO_OTHERCP), false);
 					return TRUE;
 				case IDC_RADIO_ANSI:
-					ndds._encoding = uni8Bit;
+					ndds._unicodeMode = uni8Bit;
 					ndds._openAnsiAsUtf8 = false;
 					makeOpenAnsiAsUtf8(false);
 					ndds._codepage = -1;
@@ -2160,7 +2172,6 @@ BOOL CALLBACK PrintSettingsDlg::run_dlgProc(UINT Message, WPARAM wParam, LPARAM)
 }
 
 
-
 BOOL CALLBACK BackupDlg::run_dlgProc(UINT Message, WPARAM wParam, LPARAM)
 {
 	NppParameters *pNppParam = NppParameters::getInstance();
@@ -2169,21 +2180,30 @@ BOOL CALLBACK BackupDlg::run_dlgProc(UINT Message, WPARAM wParam, LPARAM)
 	{
 		case WM_INITDIALOG :
 		{
-			int ID2Check = 0;
+			::SendDlgItemMessage(_hSelf, IDC_CHECK_REMEMBERSESSION, BM_SETCHECK, nppGUI._rememberLastSession, 0);
+			bool snapshotCheck = nppGUI._rememberLastSession && nppGUI.isSnapshotMode();
+			::SendDlgItemMessage(_hSelf, IDC_BACKUPDIR_RESTORESESSION_CHECK, BM_SETCHECK, snapshotCheck?BST_CHECKED:BST_UNCHECKED, 0);
+			int periodicBackupInSec = nppGUI._snapshotBackupTiming/1000;
+			::SetDlgItemInt(_hSelf, IDC_BACKUPDIR_RESTORESESSION_EDIT, periodicBackupInSec, FALSE);
+			generic_string backupFilePath = NppParameters::getInstance()->getUserPath();
+			backupFilePath += TEXT("\\backup\\");
+			::SetDlgItemText(_hSelf, IDD_BACKUPDIR_RESTORESESSION_PATH_EDIT, backupFilePath.c_str());
+
+			int ID2CheckBackupOnSave = 0;
 
 			switch (nppGUI._backup)
 			{
 				case bak_simple :
-					ID2Check = IDC_RADIO_BKSIMPLE;
+					ID2CheckBackupOnSave = IDC_RADIO_BKSIMPLE;
 					break;
 				case bak_verbose :
-					ID2Check = IDC_RADIO_BKVERBOSE;
+					ID2CheckBackupOnSave = IDC_RADIO_BKVERBOSE;
 					break;
 				
 				default : //bak_none
-					ID2Check = IDC_RADIO_BKNONE;
+					ID2CheckBackupOnSave = IDC_RADIO_BKNONE;
 			}
-			::SendDlgItemMessage(_hSelf, ID2Check, BM_SETCHECK, BST_CHECKED, 0);
+			::SendDlgItemMessage(_hSelf, ID2CheckBackupOnSave, BM_SETCHECK, BST_CHECKED, 0);
 
 			if (nppGUI._useDir)
 				::SendDlgItemMessage(_hSelf, IDC_BACKUPDIR_CHECK, BM_SETCHECK, BST_CHECKED, 0);
@@ -2206,11 +2226,74 @@ BOOL CALLBACK BackupDlg::run_dlgProc(UINT Message, WPARAM wParam, LPARAM)
 						nppGUI._backupDir = inputDir;
 						return TRUE;
 					}
+
+					case IDC_BACKUPDIR_RESTORESESSION_EDIT:
+					{
+						
+						const int stringSize = 16;
+						TCHAR str[stringSize];
+
+						::GetDlgItemText(_hSelf, IDC_BACKUPDIR_RESTORESESSION_EDIT, str, stringSize);
+
+						if (lstrcmp(str, TEXT("")) == 0)
+							return TRUE;
+
+						nppGUI._snapshotBackupTiming = ::GetDlgItemInt(_hSelf, IDC_BACKUPDIR_RESTORESESSION_EDIT, NULL, FALSE) * 1000;
+						if (!nppGUI._snapshotBackupTiming)
+						{
+							nppGUI._snapshotBackupTiming = 1000;
+							::SetDlgItemInt(_hSelf, IDC_BACKUPDIR_RESTORESESSION_EDIT, 1, FALSE);
+						}
+						return TRUE;
+					}
+				}
+			}
+			else if (HIWORD(wParam) == EN_KILLFOCUS)
+			{
+				switch (LOWORD(wParam))
+				{
+					case  IDC_BACKUPDIR_RESTORESESSION_EDIT:
+					{
+						//printStr(TEXT(""));
+						const int stringSize = 16;
+						TCHAR str[stringSize];
+
+						::GetDlgItemText(_hSelf, IDC_BACKUPDIR_RESTORESESSION_EDIT, str, stringSize);
+
+						if (lstrcmp(str, TEXT("")) == 0)
+						{
+							::SetDlgItemInt(_hSelf, IDC_BACKUPDIR_RESTORESESSION_EDIT, nppGUI._snapshotBackupTiming/1000, FALSE);
+						}
+					}
 				}
 			}
 
 			switch (wParam)
 			{
+				case IDC_CHECK_REMEMBERSESSION:
+				{
+					nppGUI._rememberLastSession = isCheckedOrNot(IDC_CHECK_REMEMBERSESSION);
+					if (!nppGUI._rememberLastSession)
+					{
+						::SendDlgItemMessage(_hSelf, IDC_BACKUPDIR_RESTORESESSION_CHECK, BM_SETCHECK, BST_UNCHECKED, 0);
+						::SendMessage(_hSelf, WM_COMMAND, IDC_BACKUPDIR_RESTORESESSION_CHECK, 0);
+					}
+					updateBackupGUI();
+					return TRUE;
+				}
+				case IDC_BACKUPDIR_RESTORESESSION_CHECK:
+				{
+					nppGUI._isSnapshotMode = BST_CHECKED == ::SendDlgItemMessage(_hSelf, IDC_BACKUPDIR_RESTORESESSION_CHECK, BM_GETCHECK, 0, 0);
+					updateBackupGUI();
+
+					if (nppGUI._isSnapshotMode)
+					{
+						// Launch thread
+						::SendMessage(::GetParent(_hParent), NPPM_INTERNAL_ENABLESNAPSHOT, 0, 0);
+					}
+					return TRUE;
+				}
+
 				case IDC_RADIO_BKSIMPLE:
 				{
 					nppGUI._backup = bak_simple;
@@ -2256,6 +2339,15 @@ BOOL CALLBACK BackupDlg::run_dlgProc(UINT Message, WPARAM wParam, LPARAM)
 
 void BackupDlg::updateBackupGUI()
 {
+	bool rememberSession = isCheckedOrNot(IDC_CHECK_REMEMBERSESSION);
+	bool isSnapshot = isCheckedOrNot(IDC_BACKUPDIR_RESTORESESSION_CHECK);
+	::EnableWindow(::GetDlgItem(_hSelf, IDC_BACKUPDIR_RESTORESESSION_CHECK), rememberSession);
+	::EnableWindow(::GetDlgItem(_hSelf, IDD_BACKUPDIR_RESTORESESSION_STATIC1), isSnapshot);
+	::EnableWindow(::GetDlgItem(_hSelf, IDC_BACKUPDIR_RESTORESESSION_EDIT), isSnapshot);
+	::EnableWindow(::GetDlgItem(_hSelf, IDD_BACKUPDIR_RESTORESESSION_STATIC2), isSnapshot);
+	::EnableWindow(::GetDlgItem(_hSelf, IDD_BACKUPDIR_RESTORESESSION_PATHLABEL_STATIC), isSnapshot);
+	::EnableWindow(::GetDlgItem(_hSelf, IDD_BACKUPDIR_RESTORESESSION_PATH_EDIT), isSnapshot);
+
 	bool noBackup = BST_CHECKED == ::SendDlgItemMessage(_hSelf, IDC_RADIO_BKNONE, BM_GETCHECK, 0, 0);
 	bool isEnableGlobableCheck = false;
 	bool isEnableLocalCheck = false;
@@ -2699,3 +2791,112 @@ BOOL CALLBACK DelimiterSettingsDlg::run_dlgProc(UINT Message, WPARAM wParam, LPA
 
 	return FALSE;
 }
+
+BOOL CALLBACK SettingsOnCloudDlg::run_dlgProc(UINT Message, WPARAM wParam, LPARAM)
+{
+	NppGUI & nppGUI = (NppGUI &)((NppParameters::getInstance())->getNppGUI());
+	switch (Message) 
+	{
+		case WM_INITDIALOG :
+		{
+			CloudChoice cloudChoice = nppGUI._cloudChoice;
+			_initialCloudChoice = nppGUI._cloudChoice;
+/*
+			COLORREF bgColor = getCtrlBgColor(_hSelf);
+			SetTextColor(hdcStatic, RGB(255, 0, 0));
+			SetBkColor(hdcStatic, RGB(GetRValue(bgColor) - 30, GetGValue(bgColor) - 30, GetBValue(bgColor) - 30));
+*/
+			::SendDlgItemMessage(_hSelf, IDC_NOCLOUD_RADIO, BM_SETCHECK, cloudChoice == noCloud?BST_CHECKED:BST_UNCHECKED, 0);
+
+			::SendDlgItemMessage(_hSelf, IDC_DROPBOX_RADIO, BM_SETCHECK, cloudChoice == dropbox?BST_CHECKED:BST_UNCHECKED, 0);
+			::EnableWindow(::GetDlgItem(_hSelf, IDC_DROPBOX_RADIO), (nppGUI._availableClouds & DROPBOX_AVAILABLE) != 0);
+
+			::SendDlgItemMessage(_hSelf, IDC_ONEDRIVE_RADIO, BM_SETCHECK, cloudChoice == oneDrive?BST_CHECKED:BST_UNCHECKED, 0);
+			::EnableWindow(::GetDlgItem(_hSelf, IDC_ONEDRIVE_RADIO), (nppGUI._availableClouds & ONEDRIVE_AVAILABLE) != 0);
+
+			::SendDlgItemMessage(_hSelf, IDC_GOOGLEDRIVE_RADIO, BM_SETCHECK, cloudChoice == googleDrive?BST_CHECKED:BST_UNCHECKED, 0);
+			::EnableWindow(::GetDlgItem(_hSelf, IDC_GOOGLEDRIVE_RADIO), (nppGUI._availableClouds & GOOGLEDRIVE_AVAILABLE) != 0);
+
+		}
+		break;
+
+		case WM_COMMAND : 
+		{
+			switch (wParam)
+			{
+				case IDC_NOCLOUD_RADIO :
+				{
+					nppGUI._cloudChoice = noCloud;
+					removeCloudChoice();
+					
+					generic_string message = _initialCloudChoice != nppGUI._cloudChoice?TEXT("Please restart Notepad++ to take effect."):TEXT("");
+					::SetDlgItemText(_hSelf, IDC_SETTINGSONCLOUD_WARNING_STATIC, message.c_str());
+				}
+				break;
+
+				case IDC_DROPBOX_RADIO :
+				{
+					nppGUI._cloudChoice = dropbox;
+					setCloudChoice("dropbox");
+
+					generic_string message = _initialCloudChoice != nppGUI._cloudChoice?TEXT("Please restart Notepad++ to take effect."):TEXT("");
+					::SetDlgItemText(_hSelf, IDC_SETTINGSONCLOUD_WARNING_STATIC, message.c_str());
+				}
+				break;
+
+				case IDC_ONEDRIVE_RADIO :
+				{
+					nppGUI._cloudChoice = oneDrive;
+					setCloudChoice("oneDrive");
+
+					generic_string message = _initialCloudChoice != nppGUI._cloudChoice?TEXT("Please restart Notepad++ to take effect."):TEXT("");
+					::SetDlgItemText(_hSelf, IDC_SETTINGSONCLOUD_WARNING_STATIC, message.c_str());
+				}
+				break;
+
+				case IDC_GOOGLEDRIVE_RADIO :
+				{
+					nppGUI._cloudChoice = googleDrive;
+					setCloudChoice("googleDrive");
+
+					generic_string message = _initialCloudChoice != nppGUI._cloudChoice?TEXT("Please restart Notepad++ to take effect."):TEXT("");
+					::SetDlgItemText(_hSelf, IDC_SETTINGSONCLOUD_WARNING_STATIC, message.c_str());
+				}
+				break;
+
+				default :
+					return FALSE;
+					
+			}
+		}
+		break;
+	}
+	return FALSE;
+}
+
+void SettingsOnCloudDlg::setCloudChoice(const char *choice)
+{
+	generic_string cloudChoicePath = (NppParameters::getInstance())->getSettingsFolder();
+	cloudChoicePath += TEXT("\\cloud\\");
+
+	if (!PathFileExists(cloudChoicePath.c_str()))
+	{
+		::CreateDirectory(cloudChoicePath.c_str(), NULL);
+	}
+	cloudChoicePath += TEXT("choice");
+	writeFileContent(cloudChoicePath.c_str(), choice);
+
+}
+
+void SettingsOnCloudDlg::removeCloudChoice()
+{
+	generic_string cloudChoicePath = (NppParameters::getInstance())->getSettingsFolder();
+	//NppParameters *nppParams = ;
+
+	cloudChoicePath += TEXT("\\cloud\\choice");
+	if (PathFileExists(cloudChoicePath.c_str()))
+	{
+		::DeleteFile(cloudChoicePath.c_str());
+	}
+}
+
