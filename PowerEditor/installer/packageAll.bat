@@ -45,7 +45,7 @@ copy /Y ..\bin\doLocalConf.xml .\minimalist\
 If ErrorLevel 1 PAUSE
 copy /Y ..\bin\"notepad++.exe" .\minimalist\
 If ErrorLevel 1 PAUSE
-copy /Y ..\bin\SciLexer.dll .\minimalist\
+copy /Y ..\..\scintilla\bin\SciLexer.dll .\minimalist\
 If ErrorLevel 1 PAUSE
 
 
@@ -86,7 +86,7 @@ copy /Y ..\bin\doLocalConf.xml .\zipped.package.release\
 If ErrorLevel 1 PAUSE
 copy /Y ..\bin\"notepad++.exe" .\zipped.package.release\
 If ErrorLevel 1 PAUSE
-copy /Y ..\bin\SciLexer.dll .\zipped.package.release\
+copy /Y ..\..\scintilla\bin\SciLexer.dll .\zipped.package.release\
 If ErrorLevel 1 PAUSE
 
 rem Plugins
@@ -148,7 +148,7 @@ If ErrorLevel 1 PAUSE
 If ErrorLevel 1 PAUSE
 "C:\Program Files\7-Zip\7z.exe" a -r .\build\npp.bin.7z .\zipped.package.release\*
 If ErrorLevel 1 PAUSE
-"C:\Program Files\NSIS\Unicode\makensis.exe" nppSetup.nsi
+"C:\Program Files (x86)\NSIS\makensis.exe" nppSetup.nsi
 
 
 @echo off

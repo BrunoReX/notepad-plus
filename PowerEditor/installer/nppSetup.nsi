@@ -460,7 +460,7 @@ Section -"Notepad++" mainSection
 	; Set Section Files and Shortcuts
 	SetOverwrite on
 	File "..\license.txt"
-	File "..\bin\SciLexer.dll"
+	File "..\..\scintilla\bin\SciLexer.dll"
 	File "..\bin\change.log"
 	File "..\bin\notepad++.exe"
 	File "..\bin\readme.txt"
@@ -644,12 +644,12 @@ Section "Context Menu Entry" explorerContextMenu
 	SetOverwrite try
 	SetOutPath "$INSTDIR\"
 	${If} ${RunningX64}
-		File /oname=$INSTDIR\NppShell_06.dll "..\bin\NppShell64_06.dll"
+		File /oname=$INSTDIR\NppShell.dll "..\bin\NppShell64.dll"
 	${Else}
-		File "..\bin\NppShell_06.dll"
+		File "..\bin\NppShell.dll"
 	${EndIf}
 	
-	Exec 'regsvr32 /s "$INSTDIR\NppShell_06.dll"'
+	Exec 'regsvr32 /s "$INSTDIR\NppShell.dll"'
 SectionEnd
 
 SectionGroup "Auto-completion Files" autoCompletionComponent
@@ -1790,12 +1790,14 @@ Section un.explorerContextMenu
 	Exec 'regsvr32 /u /s "$INSTDIR\NppShell_04.dll"'
 	Exec 'regsvr32 /u /s "$INSTDIR\NppShell_05.dll"'
 	Exec 'regsvr32 /u /s "$INSTDIR\NppShell_06.dll"'
+	Exec 'regsvr32 /u /s "$INSTDIR\NppShell.dll"'
 	Delete "$INSTDIR\NppShell_01.dll"
 	Delete "$INSTDIR\NppShell_02.dll"
 	Delete "$INSTDIR\NppShell_03.dll"
 	Delete "$INSTDIR\NppShell_04.dll"
 	Delete "$INSTDIR\NppShell_05.dll"
 	Delete "$INSTDIR\NppShell_06.dll"
+	Delete "$INSTDIR\NppShell.dll"
 SectionEnd
 
 Section un.UnregisterFileExt
