@@ -45,10 +45,16 @@ IF NOT EXIST "%BOOSTPATH%\boost\regex.hpp" (
 
 IF NOT EXIST "%BOOSTPATH%\bjam\bin\bjam.exe" (
 	ECHO Building BJAM, the boost build tool
-	PUSHD %BOOSTPATH%\tools\build\v2
+	
+	IF NOT EXIST "%BOOSTPATH%\tools\build\v2" (
+		PUSHD %BOOSTPATH%\tools\build
+	) ELSE (
+		PUSHD %BOOSTPATH%\tools\build\v2
+	)
+	
 	CALL bootstrap.bat
 
-	%BOOSTPATH%\tools\build\v2\b2 --prefix=%BOOSTPATH%\bjam install
+	.\b2 --prefix=%BOOSTPATH%\bjam install
 	POPD
 )
 
